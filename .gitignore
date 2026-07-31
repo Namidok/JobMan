@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+data/postings.xlsx
+data/raw/indeed.json
+applications/
+.DS_Store
