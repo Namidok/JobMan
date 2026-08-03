@@ -3,6 +3,11 @@ Builds a resume docx in the EXACT approved format/template.
 This mirrors the original build_variants.js structure 1:1 -- same layout,
 same section order, same styling. Only content ordering/emphasis changes
 per variant; the template itself never changes.
+
+JD AWARENESS: when the caller passes the `matched` keyword list (the resume
+keywords that appeared in the actual JD), bullets and skill categories are
+reordered so the most JD-relevant content appears first. This is pure
+reordering of truthful content -- nothing is invented or added.
 """
 
 from docx import Document
@@ -12,6 +17,7 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
+import re
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -20,6 +26,16 @@ from config import CONTACT, WORK_AUTH, SKILLS, EXPERIENCE, PROJECTS, EDUCATION, 
 ACCENT = RGBColor(0x2B, 0x4C, 0x7E)
 GREY = RGBColor(0x55, 0x55, 0x55)
 NAME_COLOR = RGBColor(0x1A, 0x1A, 0x1A)
+
+
+def _hit_count(text, keywords):
+    """How many of the JD-matched resume keywords appear in `text`
+    (word-boundary match, so 'sql' doesn't match 'sqlite')."""
+    if not keywords:
+        return 0
+    t = text.lower()
+    return sum(1 for kw in keywords
+               if re.search(r"\b" + re.escape(kw) + r"\b", t))
 
 
 def _add_hyperlink(paragraph, text, url):
@@ -142,9 +158,13 @@ def _link_line(doc, links):
     return p
 
 
-def build_resume(variant_key: str, output_path: str):
-    """variant_key: one of 'data_engineer', 'ai_ml', 'nlp'"""
+def build_resume(variant_key: str, output_path: str, matched=None):
+    """variant_key: one of 'data_engineer', 'ai_ml', 'nlp'.
+    matched: optional list of resume keywords found in the target JD.
+    When provided, bullets and skill lines are reordered so the most
+    JD-relevant content comes first (stable sort -- ties keep variant order)."""
     variant = VARIANTS[variant_key]
+    matched = matched or []
 
     doc = Document()
     section = doc.sections[0]
@@ -210,18 +230,22 @@ def build_resume(variant_key: str, output_path: str):
     r = p.add_run(variant["summary"])
     r.font.size = Pt(10)
 
-    # Skills
+    # Skills (most JD-relevant categories first; variant order breaks ties)
     _section_heading(doc, "TECHNICAL SKILLS")
-    for cat_key in variant["skill_order"]:
+    skill_order = sorted(variant["skill_order"],
+                         key=lambda k: _hit_count(SKILLS[k]["items"], matched),
+                         reverse=True)
+    for cat_key in skill_order:
         cat = SKILLS[cat_key]
         _skill_line(doc, cat["label"], cat["items"])
 
-    # Experience
+    # Experience (most JD-relevant bullets first within each job)
     _section_heading(doc, "PROFESSIONAL EXPERIENCE")
     for job in EXPERIENCE:
         _job_header(doc, job["title"], job["org"])
         _job_meta(doc, job["location"], job["dates"])
-        for b in job["bullets"]:
+        bullets = sorted(job["bullets"], key=lambda b: _hit_count(b, matched), reverse=True)
+        for b in bullets:
             _bullet(doc, b)
 
     # Projects
@@ -229,8 +253,10 @@ def build_resume(variant_key: str, output_path: str):
     creditlens = PROJECTS["creditlens"]
     _project_header(doc, creditlens["name"], creditlens["stack"])
     _link_line(doc, creditlens["links"])
-    for key in variant["creditlens_order"]:
-        _bullet(doc, creditlens["bullets_bank"][key])
+    creditlens_bullets = [creditlens["bullets_bank"][key] for key in variant["creditlens_order"]]
+    creditlens_bullets.sort(key=lambda b: _hit_count(b, matched), reverse=True)
+    for b in creditlens_bullets:
+        _bullet(doc, b)
 
     for proj_key in ["skillsync", "covercraft"]:
         proj = PROJECTS[proj_key]

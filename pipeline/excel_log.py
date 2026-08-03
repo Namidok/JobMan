@@ -21,7 +21,8 @@ from openpyxl.styles import Font
 COLUMNS = [
     "posting_hash", "source", "company", "title", "location",
     "date_posted", "date_collected", "jd_text", "apply_url",
-    "overlap_pct", "best_variant", "gaps", "status", "resume_file",
+    "overlap_pct", "best_variant", "gaps", "status",
+    "applied_date", "follow_up_date", "outcome", "resume_file",
 ]
 
 APPLY_URL_COL_INDEX = COLUMNS.index("apply_url") + 1
@@ -70,6 +71,7 @@ def load_all_existing_hashes(xlsx_path):
 
 
 def append_postings(xlsx_path, postings):
+    os.makedirs(os.path.dirname(xlsx_path), exist_ok=True)
     existing = load_all_existing_hashes(xlsx_path)
 
     if os.path.exists(xlsx_path):
@@ -115,6 +117,9 @@ def append_postings(xlsx_path, postings):
             "best_variant": p.get("best_variant", ""),
             "gaps": p.get("gaps", ""),
             "status": p.get("status", "not_applied"),
+            "applied_date": p.get("applied_date", ""),
+            "follow_up_date": p.get("follow_up_date", ""),
+            "outcome": p.get("outcome", ""),
             "resume_file": p.get("resume_file", ""),
         }
         ws.append([row[c] for c in COLUMNS])

@@ -15,7 +15,15 @@ What it does, in order:
   6. Save into applications/Company_Role_Date/ as:
        SrikarKodi.pdf        <- resume
        Srikar_Kodi.pdf       <- cover letter
-  7. Log everything to data/postings.xlsx with a real clickable hyperlink
+   7. Log everything to data/postings.xlsx with a real clickable hyperlink
+
+Follow-up (after you apply):
+    python main.py --mark-applied SHEET ROW          # mark a posting as applied
+    python main.py --followup                        # report + follow-up email drafts
+    python main.py --mark-outcome SHEET ROW OUTCOME  # replied/interview/offer/...
+
+New postings are packaged in priority order (best overlap_pct first), so when
+you only have a few hours you apply to the strongest fits first.
 
 You still click "Apply" yourself -- this tool prepares, it never submits.
 
@@ -30,10 +38,10 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 from collectors import arbeitnow, indeed_loader
-from pipeline import scorer, excel_log, date_filter
+from pipeline import scorer, excel_log, date_filter, followup
 from resume_builder.build import build_resume
 from resume_builder.cover_letter import build_cover_letter
-from resume_builder.pdf_convert import convert_to_pdf
+from resume_builder.pdf_convert import convert_to_pdf, count_pdf_pages
 
 XLSX_PATH = os.path.join(os.path.dirname(__file__), "data", "postings.xlsx")
 APPLICATIONS_DIR = os.path.join(os.path.dirname(__file__), "applications")
@@ -47,7 +55,14 @@ def safe_folder_name(company, title, date):
     return f"{slug}_{date}"
 
 
-def run(sources):
+def _overlap_sort_key(row):
+    try:
+        return float(row.get("overlap_pct") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def run(sources, min_overlap=0.0):
     all_postings = []
 
     if "arbeitnow" in sources:
@@ -87,6 +102,12 @@ def run(sources):
     new_rows = excel_log.append_postings(XLSX_PATH, all_postings)
     print(f"{len(new_rows)} NEW postings added to {XLSX_PATH} (duplicates skipped).\n")
 
+    new_rows.sort(key=_overlap_sort_key, reverse=True)
+    print("Priority order (best fit first) -- packages are generated in this order:\n")
+    for i, row in enumerate(new_rows, 1):
+        print(f"  {i}. [{row['overlap_pct']}% match, variant={row['best_variant']}] "
+              f"{row['company']} - {row['title']}")
+
     from datetime import date
     today = date.today().isoformat()
 
@@ -97,11 +118,21 @@ def run(sources):
 
         variant = row["best_variant"] or "ai_ml"
 
+        pct = _overlap_sort_key(row)
+        if pct < min_overlap:
+            print(f"  (skipped package: {row['company']} - {row['title']} "
+                  f"at {pct}% < {min_overlap}% minimum -- logged but no folder made)")
+            continue
+
+        # Resume keywords that actually appear in THIS JD -- drives truthful
+        # reordering in the resume and the JD-specific line in the cover letter.
+        matched = scorer.score_posting(row.get("jd_text", ""), row.get("title", ""))["matched"]
+
         resume_docx = os.path.join(folder_path, f"{RESUME_FILENAME}.docx")
         cover_docx = os.path.join(folder_path, f"{COVER_LETTER_FILENAME}.docx")
 
-        build_resume(variant, resume_docx)
-        build_cover_letter(variant, row["company"], row["title"], cover_docx)
+        build_resume(variant, resume_docx, matched=matched)
+        build_cover_letter(variant, row["company"], row["title"], cover_docx, matched=matched)
 
         try:
             resume_pdf = convert_to_pdf(resume_docx, folder_path)
@@ -109,6 +140,10 @@ def run(sources):
             os.remove(resume_docx)
             os.remove(cover_docx)
             row["resume_file"] = resume_pdf
+            pages = count_pdf_pages(resume_pdf)
+            if pages > 1:
+                print(f"  NOTE: resume for {row['company']} spills to {pages} pages "
+                      f"-- consider trimming bullets in config.py")
             print(f"[{row['overlap_pct']}% match, variant={variant}] "
                   f"{row['company']} - {row['title']}  ->  {folder_path}")
         except RuntimeError as e:
@@ -118,6 +153,9 @@ def run(sources):
 
     print(f"\nDone. {len(new_rows)} application packages ready in {APPLICATIONS_DIR}/")
     print("Review each one, then apply yourself via the apply_url logged in the Excel sheet.")
+    print("\nAfter you apply, track it so the follow-up engine can nudge you:")
+    print("  python main.py --mark-applied  SHEET ROW")
+    print("  python main.py --followup")
 
 
 if __name__ == "__main__":
@@ -127,5 +165,29 @@ if __name__ == "__main__":
         choices=["arbeitnow", "linkedin", "indeed"],
         help="Which sources to collect from this run",
     )
+    parser.add_argument(
+        "--min-overlap", type=float, default=0.0,
+        help="Skip generating application packages below this overlap_pct (still logged)",
+    )
+    parser.add_argument(
+        "--followup", action="store_true",
+        help="Show the follow-up report for data/postings.xlsx and exit",
+    )
+    parser.add_argument(
+        "--mark-applied", nargs=2, metavar=("SHEET", "ROW"),
+        help="Mark a logged posting as applied (sets applied_date + follow_up_date)",
+    )
+    parser.add_argument(
+        "--mark-outcome", nargs=3, metavar=("SHEET", "ROW", "OUTCOME"),
+        help="Record replied|interview|offer|rejected|withdrawn for a posting",
+    )
     args = parser.parse_args()
-    run(args.sources)
+
+    if args.followup:
+        followup.render_report(XLSX_PATH)
+    elif args.mark_applied:
+        followup.mark_applied(XLSX_PATH, args.mark_applied[0], args.mark_applied[1])
+    elif args.mark_outcome:
+        followup.mark_outcome(XLSX_PATH, *args.mark_outcome)
+    else:
+        run(args.sources, min_overlap=args.min_overlap)

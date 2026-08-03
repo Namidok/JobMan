@@ -61,13 +61,39 @@ public API key for it, so it can't run standalone in this script. Workflow:
    score exists across different ATS platforms; see `pipeline/scorer.py`
    for the honest explanation)
 4. Picks the best-fit resume variant: `data_engineer`, `ai_ml`, or `nlp`
-5. Generates a tailored resume in `applications/Company_Role_Date/resume.docx`
-   -- same approved template every time, only reordering/relabeling truthful
-   content (see `config.py` -- this is the single source of truth; nothing
+5. Packages postings in priority order (highest overlap first), so on a
+   short day you apply to the strongest fits first
+6. Generates a tailored resume in `applications/Company_Role_Date/resume.docx`
+   -- same approved template every time, but JD-aware: bullets and skill
+   categories are reordered so the content that matters for THIS posting
+   comes first. Only reordering/relabeling of truthful content
+   (see `config.py` -- this is the single source of truth; nothing
    gets invented)
-6. Generates `cover_letter.docx` in the same folder
-7. Logs everything to `data/postings.xlsx`, including the `apply_url` you'll
+7. Generates `cover_letter.docx` in the same folder -- includes a truthful
+   line naming the skills the posting itself highlights, a German-formal
+   date header, and pulls all facts from `config.py`
+8. Logs everything to `data/postings.xlsx`, including the `apply_url` you'll
    use to actually submit
+
+A resume that spills past one page is flagged with a warning after PDF
+conversion -- trim bullets in `config.py` if you see it.
+
+## Follow-up (getting replies)
+
+```bash
+# after you submit an application, mark it:
+python main.py --mark-applied  SHEET ROW            # e.g. --mark-applied "2026-07-31_09-00-00" 5
+
+# any time: see what needs a follow-up (+7 days) and get a ready-to-send
+# follow-up email draft built from config.py content:
+python main.py --followup
+
+# when something comes back, record it so it drops off the follow-up list:
+python main.py --mark-outcome SHEET ROW replied|interview|offer|rejected|withdrawn
+```
+
+The sheet name and row number for a posting are shown in the `--followup`
+report, or just read them off `data/postings.xlsx`.
 
 ## What this does NOT do
 

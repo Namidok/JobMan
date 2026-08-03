@@ -1,10 +1,16 @@
 """
 Generates a simple, honest cover letter docx per posting.
 Pulls only from config.py content -- no invented achievements.
+
+JD AWARENESS: when the caller passes the `matched` keyword list (the resume
+keywords that appeared in the actual JD), a truthful sentence naming those
+skills is injected into the letter. Facts like role/experience/availability
+come from config.py (VARIANTS + CONTACT), never hardcoded.
 """
 
 from docx import Document
 from docx.shared import Pt, RGBColor
+from datetime import date
 import os
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -12,20 +18,14 @@ from config import CONTACT, VARIANTS
 
 GREY = RGBColor(0x55, 0x55, 0x55)
 
-TEMPLATE = """Dear Hiring Team at {company},
+GERMAN_MONTHS = ["Januar", "Februar", "M\u00e4rz", "April", "Mai", "Juni",
+                 "Juli", "August", "September", "Oktober", "November", "Dezember"]
 
-I'm writing to apply for the {role} position at {company}. I'm a Software Engineer with 3 years of production experience and currently completing an MSc in Computer Science (Big Data & AI) in Berlin, seeking a Pflichtpraktikum (mandatory internship) starting August 2026.
-
-{highlight}
-
-I've attached my resume with further detail on my experience and projects, including CreditLens, SkillSync, and CoverCraft -- all live, self-deployed applications. I'd welcome the chance to talk about how I could contribute to your team.
-
-Thank you for your consideration.
-
-Best regards,
-Srikar Kodi
-{email} | {phone}
-"""
+TIE_INS = {
+    "data_engineer": "the same tools behind my Python ETL and data-validation work on CreditLens",
+    "ai_ml": "tools I've applied in production NLP and RAG systems",
+    "nlp": "tools I've applied across my NLP systems and RAG document Q&A work",
+}
 
 HIGHLIGHTS = {
     "data_engineer": (
@@ -48,15 +48,42 @@ HIGHLIGHTS = {
 }
 
 
-def build_cover_letter(variant_key: str, company: str, role: str, output_path: str):
-    highlight = HIGHLIGHTS[variant_key]
-    text = TEMPLATE.format(
-        company=company,
-        role=role,
-        highlight=highlight,
-        email=CONTACT["email"],
-        phone=CONTACT["phone"],
-    )
+def _german_date():
+    today = date.today()
+    return f"{today.day}. {GERMAN_MONTHS[today.month - 1]} {today.year}"
+
+
+def _jd_line(variant_key, matched):
+    if not matched:
+        return ""
+    skills = ", ".join(matched[:6])
+    return (f"Your posting highlights {skills} \u2014 {TIE_INS[variant_key]}.")
+
+
+def build_cover_letter(variant_key: str, company: str, role: str, output_path: str,
+                       matched=None):
+    variant = VARIANTS[variant_key]
+    matched = matched or []
+
+    parts = [
+        f"Berlin, {_german_date()}",
+        f"Dear Hiring Team at {company},",
+        (f"I'm writing to apply for the {role} position at {company}. "
+         f"{variant['summary']}"),
+        HIGHLIGHTS[variant_key],
+    ]
+    jd_line = _jd_line(variant_key, matched)
+    if jd_line:
+        parts.append(jd_line)
+    parts += [
+        "I've attached my resume with further detail on my experience and projects, "
+        "including CreditLens, SkillSync, and CoverCraft -- all live, self-deployed "
+        "applications. I'd welcome the chance to talk about how I could contribute to "
+        "your team.",
+        "Thank you for your consideration.",
+        f"Best regards,\nSrikar Kodi\n{CONTACT['email']} | {CONTACT['phone']}",
+    ]
+    text = "\n\n".join(parts)
 
     doc = Document()
     for para in text.split("\n\n"):
