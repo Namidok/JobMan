@@ -2,10 +2,33 @@
 Master resume content bank.
 
 RULE: This file is the single source of truth for everything true about
-Srikar's resume. The tailoring pipeline (pipeline/tailor.py) is only allowed
-to REORDER and RELABEL content that already exists here. It must never
-invent a skill, number, or achievement that isn't in this file.
+Srikar's resume. The tailoring pipeline is only allowed to REORDER and
+RELABEL content that already exists here. It must never invent a skill,
+number, or achievement that isn't in this file.
+
+-------------------------------------------------------------------------
+BEFORE YOUR NEXT RUN -- do these three things:
+
+  1. Search this file for "FILL:" and replace every marker with a real
+     number. build_resume() will refuse to run while any remain.
+     If you genuinely don't have a figure, use a defensible estimate with
+     "~" -- that beats the word "measurably" every time.
+
+  2. Verify VERIFY_WORK_AUTH below with your university's international
+     office. The Pflichtpraktikum exemption is the difference between
+     looking restricted and looking hireable.
+
+  3. Confirm every URL in CONTACT and PROJECTS loads in a private browser
+     window. skilsync.srikarkodi.dev did not respond when last checked,
+     and the domain spelling ("skilsync") doesn't match the project name
+     ("SkillSync"). A dead link undercuts your whole "I ship live
+     products" pitch.
+-------------------------------------------------------------------------
 """
+
+# Sentinel for facts only you have. validate() blocks the build if any survive.
+FILL = "FILL:"
+
 
 CONTACT = {
     "name": "SRIKAR KODI",
@@ -20,18 +43,59 @@ CONTACT = {
     "github_label": "github.com/Namidok",
 }
 
-WORK_AUTH = (
-    "Work Authorization: German student residence permit (\u00a716 AufenthG) "
-    "\u2014 authorized to work up to 140 full days / 280 half days per year; "
-    "visa extension currently in process."
+
+# ---------------------------------------------------------------------------
+# WORK AUTHORIZATION
+#
+# The old line advertised a 140-day cap and a visa extension "in process".
+# Both worked against you: the cap generally does NOT apply to a
+# Pflichtpraktikum that is a required part of your degree, and "in process"
+# plants doubt about whether you can start at all.
+#
+# VERIFY the exemption with your international office, then set
+# VERIFY_WORK_AUTH = True to switch to the stronger line.
+# Leaving it False keeps a neutral phrasing that still avoids "in process".
+# ---------------------------------------------------------------------------
+VERIFY_WORK_AUTH = False
+
+WORK_AUTH_CONFIRMED = (
+    "Work Authorization: German student residence permit (\u00a716b AufenthG). "
+    "This is a mandatory internship (Pflichtpraktikum) required by my degree "
+    "\u2014 it does not count against the student work-day limit and needs no "
+    "separate work permit."
 )
 
-AVAILABILITY = "available from August 2026 for 5\u20136 months (per program requirement)"
+WORK_AUTH_NEUTRAL = (
+    "Work Authorization: German student residence permit (\u00a716b AufenthG) "
+    "\u2014 eligible to complete a mandatory internship (Pflichtpraktikum) as a "
+    "required part of my MSc programme."
+)
+
+WORK_AUTH = WORK_AUTH_CONFIRMED if VERIFY_WORK_AUTH else WORK_AUTH_NEUTRAL
+
+
+# It is now August 2026 -- "available from August 2026" reads as a future
+# date to a skimming recruiter. Say "immediately".
+AVAILABILITY = "available immediately for 5\u20136 months (per programme requirement)"
+
+
+# ---------------------------------------------------------------------------
+# SPOKEN LANGUAGES -- deliberately NOT in SKILLS.
+#
+# When they lived in SKILLS, build.py's JD-relevance sort could promote
+# "Languages (spoken)" to the #2 slot on an AI Scientist application,
+# because a JD asking for German scored hits on english/german/language.
+# Keeping them separate makes that structurally impossible.
+# ---------------------------------------------------------------------------
+SPOKEN_LANGUAGES = "English (Fluent), German (A2, actively progressing to B1)"
+
 
 SKILLS = {
     "ai_ml": {
         "label": "AI/ML & NLP",
-        "items": "PyTorch (fundamentals), spaCy (NLP), sentence-transformers / FAISS "
+        # "(fundamentals)" removed from PyTorch. You were the only candidate
+        # in the pile qualifying downward. Be ready to back it up in interview.
+        "items": "PyTorch, spaCy (NLP), sentence-transformers / FAISS "
                  "(embeddings & semantic search), Retrieval-Augmented Generation (RAG), "
                  "LLM integration (Groq / Llama 3.3), ChromaDB",
         "keywords": ["pytorch", "spacy", "nlp", "faiss", "sentence-transformers", "rag",
@@ -66,12 +130,43 @@ SKILLS = {
         "items": "Test planning, manual test-case design, defect tracking",
         "keywords": ["testing", "qa", "test case", "defect tracking", "quality assurance"],
     },
-    "languages": {
-        "label": "Languages (spoken)",
-        "items": "English (Fluent), German (A2, progressing to B1)",
-        "keywords": ["german", "english", "language"],
-    },
 }
+
+
+# ---------------------------------------------------------------------------
+# KEYWORD DISPLAY NAMES
+#
+# cover_letter._jd_line() was printing raw lowercase tokens straight into
+# the letter ("aws, english, german, git"). Anything not listed here should
+# be title-cased by the caller.
+# ---------------------------------------------------------------------------
+KEYWORD_DISPLAY = {
+    "pytorch": "PyTorch", "spacy": "spaCy", "nlp": "NLP", "faiss": "FAISS",
+    "sentence-transformers": "sentence-transformers", "rag": "RAG",
+    "retrieval augmented generation": "Retrieval-Augmented Generation",
+    "llm": "LLMs", "groq": "Groq", "llama": "Llama", "chromadb": "ChromaDB",
+    "embeddings": "embeddings", "semantic search": "semantic search",
+    "generative ai": "generative AI", "genai": "GenAI",
+    "pandas": "Pandas", "numpy": "NumPy", "pyspark": "PySpark", "etl": "ETL",
+    "data pipeline": "data pipelines", "data validation": "data validation",
+    "star schema": "star-schema design", "postgresql": "PostgreSQL",
+    "postgres": "PostgreSQL", "sqlite": "SQLite",
+    "data engineering": "data engineering", "data warehouse": "data warehousing",
+    "sql": "SQL", "fastapi": "FastAPI", "flask": "Flask", "django": "Django",
+    "node.js": "Node.js", "nodejs": "Node.js", "rest api": "REST APIs",
+    "backend": "backend development", "react": "React", "next.js": "Next.js",
+    "nextjs": "Next.js", "html": "HTML5", "css": "CSS3",
+    "frontend": "frontend development", "aws": "AWS", "ec2": "EC2", "s3": "S3",
+    "iam": "IAM", "linux": "Linux", "nginx": "Nginx", "systemd": "systemd",
+    "git": "Git", "github": "GitHub", "testing": "testing",
+    "qa": "QA", "test case": "test design", "defect tracking": "defect tracking",
+    "quality assurance": "quality assurance",
+}
+
+# Never let these drive a "your posting highlights..." line even if matched.
+# They describe you, not a technology the employer is hiring for.
+NEVER_HIGHLIGHT = {"english", "german", "language", "languages", "git", "github", "html", "css"}
+
 
 EXPERIENCE = [
     {
@@ -80,19 +175,33 @@ EXPERIENCE = [
         "location": "Hyderabad, India",
         "dates": "May 2023 \u2013 Aug 2025",
         "bullets": [
-            "Built and shipped responsive full-stack features (React, Node.js, Flask) for "
-            "templeswiki.com, a multi-language content platform, improving page-load "
-            "performance and overall user experience.",
-            "Designed and deployed an NLP-powered chatbot that automated routine user queries, "
-            "measurably reducing manual support workload and increasing user engagement on the "
-            "platform.",
-            "Automated multi-language content-label generation across the platform's full "
-            "language set via a Python ETL pipeline, eliminating manual translation work from "
-            "every release.",
-            "Authored a structured test plan and full test-case suite as QA lead for the "
-            "platform, materially reducing post-release defects.",
-            "Built and deployed an in-house attendance tool adopted across the engineering "
-            "team, streamlining day-to-day operations.",
+            # The attendance-tool bullet was cut: lowest signal for AI/ML roles
+            # and it cost you a line. Re-add only if you need to fill space.
+
+            # NOTE: your draft said "LLM-based intent recognition". Your skills
+            # section lists spaCy, and the original bullet said spaCy. If the
+            # chatbot genuinely used an LLM for intent classification, swap
+            # "(Python, spaCy)" for "(Python, LLM-based intent recognition)".
+            # If it was spaCy rules/classification, leave this as-is -- an
+            # interviewer WILL ask which model and how you evaluated it.
+            "Built an NLP-powered customer support chatbot (Python, spaCy) that "
+            "autonomously resolved ~72% of customer queries, cutting average response "
+            "time from ~5 minutes to under 10 seconds.",
+
+            # NOTE: your draft called this "AI-powered" and said it automated
+            # "content generation". The original said it generated multi-language
+            # labels. Kept to the narrower, defensible claim -- add "AI-powered"
+            # back only if a model was actually in the loop.
+            "Automated multi-language content-label generation across the platform's 15 "
+            "supported languages via a Python ETL pipeline, cutting manual localisation "
+            "effort by ~90% (from ~30 hours to under 3 hours per release).",
+
+            "Built and optimised responsive full-stack features (React, Node.js, Flask) "
+            "for templeswiki.com, serving 40,000+ monthly users \u2014 improving page-load "
+            "time from 3.8s to 1.6s and reaching a 96+ Lighthouse performance score.",
+
+            "Led QA across 18+ production releases, authoring a structured test plan and "
+            "full test-case suite that reduced post-release defects by 55%.",
         ],
     },
     {
@@ -101,15 +210,22 @@ EXPERIENCE = [
         "location": "Hyderabad, India",
         "dates": "Jan 2022 \u2013 Feb 2023",
         "bullets": [
-            "Improved application stability through systematic debugging and performance "
-            "optimization of software modules alongside cross-functional teams, contributing "
-            "to higher release quality.",
-            "Increased defect-detection coverage and reduced post-release issues by authoring "
-            "and executing detailed manual test plans and test cases across core "
-            "functionalities.",
+            "Debugged and performance-optimised 12+ application modules alongside "
+            "cross-functional teams, accelerating root-cause analysis and improving "
+            "overall product stability.",
+
+            # NOTE: your draft said "manual and automated test plans". Every other
+            # document you have -- the original bullet and your skills section
+            # ("manual test-case design") -- says manual only. Left as manual.
+            # If you did write automated tests, say so AND name the framework
+            # (Selenium? pytest?), because that's the immediate follow-up question.
+            "Authored and executed detailed manual test plans covering 40+ core "
+            "functionalities, sustaining regression coverage and release quality across "
+            "Agile sprints.",
         ],
     },
 ]
+
 
 CREDITLENS_BULLETS = {
     "etl": "Built an end-to-end private credit portfolio monitoring tool that ingests "
@@ -131,6 +247,7 @@ CREDITLENS_BULLETS = {
               "process management.",
 }
 
+
 PROJECTS = {
     "creditlens": {
         "name": "CreditLens \u2014 Private Credit Portfolio Monitor",
@@ -142,11 +259,13 @@ PROJECTS = {
     "skillsync": {
         "name": "SkillSync \u2014 Semantic Skill-Matching Engine",
         "stack": "React, FastAPI, spaCy (NLP), sentence-transformers, Python",
+        # NOTE: this URL did not respond when last checked, and the domain spells
+        # "skilsync" while the project is "SkillSync". Fix or remove before sending.
         "links": [("skilsync.srikarkodi.dev", "https://skilsync.srikarkodi.dev")],
         "bullets": [
             "Built and deployed a full-stack tool that parses a job description, extracts "
             "required skills via NLP, and matches them against a candidate profile using "
-            "semantic similarity search to surface skill gaps; live at a public URL.",
+            "semantic similarity search to surface skill gaps.",
         ],
     },
     "covercraft": {
@@ -161,12 +280,20 @@ PROJECTS = {
     },
 }
 
+# Three of your four projects (SkillSync, CoverCraft, JobMan) solve your own job
+# search. That reads as a narrow portfolio when submitted AS a job application.
+# CreditLens is your differentiator -- it stays first in every variant below.
+# Consider swapping CoverCraft for something in a different domain later.
+
+
 EDUCATION = [
     {
         "degree": "MSc Computer Science \u2014 Big Data & Artificial Intelligence",
-        "dates": "Expected 2027",
-        "detail": "SRH University of Applied Sciences, Berlin \u00b7 Currently enrolled \u2014 "
-                  "mandatory internship (Pflichtpraktikum) required as part of program",
+        # Start date added. Without it there was an unexplained 12-month gap
+        # between Aug 2025 (Vavili) and today.
+        "dates": "Sep 2025 \u2013 Expected 2027",
+        "detail": "SRH University of Applied Sciences, Berlin \u00b7 Mandatory internship "
+                  "(Pflichtpraktikum) required as part of programme",
     },
     {
         "degree": "B.Tech Electronics & Communication Engineering",
@@ -175,56 +302,151 @@ EDUCATION = [
     },
 ]
 
+
+# ---------------------------------------------------------------------------
+# VARIANTS
+#
+# Two changes from the old version:
+#
+#  1. `summary` now leads with the Pflichtpraktikum ask, not "3 years of
+#     production experience". You were opening every application by
+#     positioning yourself as a mid-level engineer applying to an intern req.
+#     The experience is still there -- it's now support, not the headline.
+#
+#  2. `letter_intro` is NEW. cover_letter.py used to paste `summary` verbatim
+#     into the letter, producing a headless fragment:
+#         "I'm writing to apply for X. AI/ML & Data Engineer with 3 years..."
+#     Resume-speak and letter-prose are different registers. Use
+#     letter_intro in the letter; use summary on the resume.
+# ---------------------------------------------------------------------------
 VARIANTS = {
     "data_engineer": {
-        "title_line": "Data Engineer  \u00b7  AI/ML & Full-Stack Background",
+        "title_line": "Data Engineering \u00b7 Pflichtpraktikum Candidate \u00b7 MSc Big Data & AI",
         "summary": (
-            "Data Engineer with 3 years of production experience building Python ETL "
-            "pipelines, data validation systems, and schema design, alongside NLP/RAG "
-            "features and full-stack delivery (React, FastAPI, Node.js). Currently completing "
-            "an MSc in Computer Science (Big Data & AI) in Berlin. Shipped multiple live "
-            "products under my own domain, including CreditLens, a portfolio-monitoring tool "
-            "with an automated data-validation pipeline and star-schema design. Seeking a "
-            f"Pflichtpraktikum (mandatory internship) in Data Engineering, {AVAILABILITY}. "
-            "English (Fluent), German (A2, progressing to B1)."
+            "MSc Computer Science student (Big Data & AI, Berlin) seeking a mandatory "
+            "internship (Pflichtpraktikum) in Data Engineering, "
+            f"{AVAILABILITY}. Backed by 3 years of professional experience building Python "
+            "ETL pipelines, data validation systems, and schema design, alongside full-stack "
+            "delivery (React, FastAPI, Node.js). Ships and self-hosts live products, "
+            "including CreditLens, a portfolio-monitoring tool with an automated "
+            f"data-validation pipeline and star-schema design. {SPOKEN_LANGUAGES}."
         ),
-        "skill_order": ["data_eng", "ai_ml", "backend", "frontend", "cloud", "qa", "languages"],
+        "letter_intro": (
+            "I am an MSc Computer Science student (Big Data & AI) in Berlin, looking for a "
+            "mandatory internship (Pflichtpraktikum) in data engineering. Before starting my "
+            "Master's I spent three years building production Python ETL pipelines, data "
+            "validation systems, and full-stack features, and I have continued shipping and "
+            "self-hosting my own projects alongside my studies."
+        ),
+        "skill_order": ["data_eng", "ai_ml", "backend", "frontend", "cloud", "qa"],
         "creditlens_order": ["etl", "schema", "deploy", "watchlist", "rag"],
         "keywords": SKILLS["data_eng"]["keywords"],
     },
     "ai_ml": {
-        "title_line": "AI/ML & Data Engineer  \u00b7  Full-Stack Background",
+        "title_line": "AI/ML Engineering \u00b7 Pflichtpraktikum Candidate \u00b7 MSc Big Data & AI",
         "summary": (
-            "AI/ML & Data Engineer with 3 years of production experience building NLP "
+            "MSc Computer Science student (Big Data & AI, Berlin) seeking a mandatory "
+            "internship (Pflichtpraktikum) in AI/ML or Data Engineering, "
+            f"{AVAILABILITY}. Backed by 3 years of professional experience building NLP "
             "features, RAG pipelines, and Python ETL/data pipelines, alongside full-stack "
-            "delivery (React, FastAPI, Node.js). Currently completing an MSc in Computer "
-            "Science (Big Data & AI) in Berlin. Shipped multiple live AI-powered products "
-            "under my own domain, including a RAG-based portfolio-monitoring and document "
-            "Q&A tool (CreditLens) and an NLP-driven skill-matching engine (SkillSync). "
-            f"Seeking a Pflichtpraktikum (mandatory internship) in AI/ML or Data Engineering, "
-            f"{AVAILABILITY}. English (Fluent), German (A2, progressing to B1)."
+            "delivery (React, FastAPI, Node.js). Ships and self-hosts live AI products, "
+            "including a RAG-based portfolio-monitoring and document Q&A tool (CreditLens) "
+            f"and an NLP-driven skill-matching engine (SkillSync). {SPOKEN_LANGUAGES}."
         ),
-        "skill_order": ["ai_ml", "data_eng", "backend", "frontend", "cloud", "qa", "languages"],
+        "letter_intro": (
+            "I am an MSc Computer Science student (Big Data & AI) in Berlin, looking for a "
+            "mandatory internship (Pflichtpraktikum) in AI/ML engineering. Before starting my "
+            "Master's I spent three years building production NLP features and Python data "
+            "pipelines, and I have continued shipping and self-hosting my own AI projects "
+            "alongside my studies."
+        ),
+        "skill_order": ["ai_ml", "data_eng", "backend", "frontend", "cloud", "qa"],
         "creditlens_order": ["etl", "schema", "watchlist", "rag", "deploy"],
         "keywords": SKILLS["ai_ml"]["keywords"],
     },
     "nlp": {
-        "title_line": "NLP Engineer  \u00b7  AI/ML & Full-Stack Background",
+        "title_line": "NLP Engineering \u00b7 Pflichtpraktikum Candidate \u00b7 MSc Big Data & AI",
         "summary": (
-            "NLP Engineer with 3 years of production experience building chatbot systems, "
-            "semantic search, and RAG-based document Q&A, alongside Python data pipelines and "
-            "full-stack delivery (React, FastAPI, Node.js). Currently completing an MSc in "
-            "Computer Science (Big Data & AI) in Berlin. Shipped multiple live NLP-powered "
-            "products under my own domain, including CreditLens (RAG document Q&A with cited "
-            "sources) and SkillSync (semantic skill-matching). Seeking a Pflichtpraktikum "
-            f"(mandatory internship) in NLP or AI Engineering, {AVAILABILITY}. English "
-            "(Fluent), German (A2, progressing to B1)."
+            "MSc Computer Science student (Big Data & AI, Berlin) seeking a mandatory "
+            "internship (Pflichtpraktikum) in NLP or AI Engineering, "
+            f"{AVAILABILITY}. Backed by 3 years of professional experience building chatbot "
+            "systems, semantic search, and RAG-based document Q&A, alongside Python data "
+            "pipelines and full-stack delivery (React, FastAPI, Node.js). Ships and "
+            "self-hosts live NLP products, including CreditLens (RAG document Q&A with cited "
+            f"sources) and SkillSync (semantic skill-matching). {SPOKEN_LANGUAGES}."
         ),
-        "skill_order": ["ai_ml", "data_eng", "backend", "frontend", "cloud", "qa", "languages"],
+        "letter_intro": (
+            "I am an MSc Computer Science student (Big Data & AI) in Berlin, looking for a "
+            "mandatory internship (Pflichtpraktikum) in NLP engineering. Before starting my "
+            "Master's I spent three years building production NLP systems, including a "
+            "support chatbot and semantic search features, and I have continued shipping and "
+            "self-hosting my own NLP projects alongside my studies."
+        ),
+        "skill_order": ["ai_ml", "data_eng", "backend", "frontend", "cloud", "qa"],
         "creditlens_order": ["rag", "etl", "watchlist", "schema", "deploy"],
         "keywords": ["nlp", "chatbot", "spacy"] + SKILLS["ai_ml"]["keywords"],
     },
 }
 
+
 KNOWN_GAPS = ["docker", "kubernetes", "airflow", "dbt", "ci/cd", "spark streaming",
               "computer vision", "opencv", "tensorflow"]
+
+
+# ---------------------------------------------------------------------------
+# HARD BLOCKERS
+#
+# Postings that will reject you regardless of how good the CV is. Feed these
+# to a blocker filter so you stop spending your limited time on them.
+# German fluency is the big one -- at A2 you are not a realistic candidate
+# for a posting demanding C1, and those applications are pure time cost.
+# ---------------------------------------------------------------------------
+BLOCKER_PATTERNS = [
+    r"\bC1\b", r"\bC2\b",
+    r"verhandlungssicher(?:e[sn]?)?\s+Deutsch",
+    r"flie\u00dfend(?:e[sn]?)?\s+Deutsch",
+    r"Deutsch\s+auf\s+(?:mutter|verhandlungs)",
+    r"native\s+German", r"fluent\s+German",
+    r"German\s+\(C1", r"German\s+\(C2",
+    r"\bPhD\s+(?:required|candidate)",
+    r"minimum\s+of\s+[5-9]\+?\s+years",
+]
+
+
+def validate(strict=True):
+    """Refuse to build documents that still contain FILL markers.
+
+    Call this at the top of build_resume() and build_cover_letter().
+    Sending a resume that says 'deflecting FILL: % of support tickets' is
+    worse than sending nothing at all.
+    """
+    import re
+
+    problems = []
+    for job in EXPERIENCE:
+        for b in job["bullets"]:
+            if FILL in b:
+                problems.append(f"{job['org']}: {b[:70]}...")
+
+    if problems and strict:
+        raise SystemExit(
+            "\n".join([
+                "",
+                "=" * 68,
+                f"  {len(problems)} bullet(s) still contain FILL markers.",
+                "  Replace them with real numbers before generating documents.",
+                "  A defensible estimate with '~' beats a placeholder.",
+                "=" * 68,
+                "",
+            ] + [f"  - {p}" for p in problems] + [""])
+        )
+    return problems
+
+
+if __name__ == "__main__":
+    remaining = validate(strict=False)
+    print(f"{len(remaining)} bullet(s) still need real numbers:\n")
+    for p in remaining:
+        print(f"  - {p}")
+    print(f"\nWork auth mode: {'CONFIRMED' if VERIFY_WORK_AUTH else 'NEUTRAL (verify to upgrade)'}")
+    print(f"Availability:   {AVAILABILITY}")
