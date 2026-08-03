@@ -1,20 +1,32 @@
 """
-Generates a simple, honest cover letter docx per posting.
+Generates an honest cover letter docx per posting.
 Pulls only from config.py content -- no invented achievements.
 
-JD AWARENESS: when the caller passes the `matched` keyword list (the resume
-keywords that appeared in the actual JD), a truthful sentence naming those
-skills is injected into the letter. Facts like role/experience/availability
-come from config.py (VARIANTS + CONTACT), never hardcoded.
+FIXES IN THIS VERSION:
+  * Page size is now A4. It was silently defaulting to US Letter while the
+    resume was A4 -- a visible mismatch on a German application.
+  * Uses VARIANTS[...]["letter_intro"] instead of pasting the resume
+    `summary` verbatim, which produced a headless fragment:
+      "I'm writing to apply for X. AI/ML & Data Engineer with 3 years..."
+  * The "your posting highlights" line now uses relevance-ranked DISPLAY
+    names from scorer.highlights, not alphabetical raw tokens. It also
+    suppresses itself entirely when there aren't at least 2 real hits,
+    rather than emitting something embarrassing.
+  * Adds a Betreff (subject) line, which German convention expects.
+  * Normalises the role title: LinkedIn titles arrive as
+    "AI Scientist, Internship, Germany - BCG X", which produced
+    "the ... - BCG X position at BCG X".
 """
 
 from docx import Document
-from docx.shared import Pt, RGBColor
+from docx.shared import Pt, RGBColor, Cm
 from datetime import date
 import os
+import re
 import sys
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from config import CONTACT, VARIANTS
+from config import CONTACT, VARIANTS, validate
 
 GREY = RGBColor(0x55, 0x55, 0x55)
 
@@ -29,23 +41,32 @@ TIE_INS = {
 
 HIGHLIGHTS = {
     "data_engineer": (
-        "My recent project, CreditLens, is a private-credit portfolio monitoring tool with a "
-        "Python ETL pipeline that validates and repairs inconsistently formatted financial "
-        "data, backed by a star-schema SQLite design -- work directly relevant to the data "
-        "engineering challenges your team is solving."
+        "My most recent project, CreditLens, is a private-credit portfolio monitoring tool "
+        "with a Python ETL pipeline that validates and repairs inconsistently formatted "
+        "financial data, backed by a star-schema SQLite design and deployed on AWS EC2."
     ),
     "ai_ml": (
-        "My recent project, CreditLens, combines a Python ETL/data-validation pipeline with a "
-        "RAG layer (sentence-transformers, ChromaDB, Groq/Llama 3.3) that answers questions "
-        "over financial documents with cited sources -- the kind of applied AI/ML work I'd "
-        "bring to this role."
+        "My most recent project, CreditLens, combines a Python ETL/data-validation pipeline "
+        "with a RAG layer (sentence-transformers, ChromaDB, Groq/Llama 3.3) that answers "
+        "questions over financial documents with cited sources and declines to answer when "
+        "the context doesn't support it."
     ),
     "nlp": (
-        "My work spans several NLP systems in production, from an NLP-powered support chatbot "
-        "to CreditLens's RAG-based document Q&A engine with cited, hallucination-checked "
-        "answers -- directly relevant to the NLP work this role involves."
+        "My work spans several NLP systems in production, from a support chatbot that "
+        "autonomously resolved around 72% of customer queries to CreditLens's RAG-based "
+        "document Q&A engine with cited, grounded answers."
     ),
 }
+
+# Suffixes LinkedIn/Indeed bolt onto job titles.
+_TITLE_NOISE = re.compile(
+    r"\s*(?:\((?:m|w|f|d|x|all genders)[/\s|,;·-]*(?:m|w|f|d|x)?[/\s|,;·-]*"
+    r"(?:m|w|f|d|x)?\)|\(all genders\))\s*",
+    re.IGNORECASE,
+)
+
+# German gender forms: "Praktikant*in", "Praktikant:innen", "Praktikant/-in".
+_GENDER_STAR = re.compile(r"[*:]\s*in(?:nen)?\b|/-?in(?:nen)?\b|\*(?=\s|$)", re.IGNORECASE)
 
 
 def _german_date():
@@ -53,45 +74,92 @@ def _german_date():
     return f"{today.day}. {GERMAN_MONTHS[today.month - 1]} {today.year}"
 
 
-def _jd_line(variant_key, matched):
-    if not matched:
+def clean_role_title(role: str, company: str = "") -> str:
+    """'AI Scientist, Internship, Germany - BCG X' + 'BCG X' -> 'AI Scientist, Internship'."""
+    title = (role or "").strip()
+    title = _GENDER_STAR.sub("", title)
+    title = _TITLE_NOISE.sub(" ", title)
+
+    if company:
+        # Drop a trailing "- Company" / "at Company" / "| Company".
+        title = re.sub(
+            r"\s*[-\u2013\u2014|@]\s*" + re.escape(company.strip()) + r"\s*$",
+            "", title, flags=re.IGNORECASE,
+        )
+        title = re.sub(r"\s+at\s+" + re.escape(company.strip()) + r"\s*$",
+                       "", title, flags=re.IGNORECASE)
+
+    # Drop a trailing country/location fragment.
+    title = re.sub(r",\s*(?:Germany|Deutschland|Berlin|M\u00fcnchen|Munich|Frankfurt|Hamburg)\s*$",
+                   "", title, flags=re.IGNORECASE)
+
+    return re.sub(r"[\s,;\-\u2013\u2014|]+$", "", title).strip() or (role or "").strip()
+
+
+def _highlight_line(variant_key, highlights):
+    """Only emit this sentence when there are >= 2 genuine, display-ready hits.
+
+    The old version fired unconditionally on alphabetically-sorted raw tokens,
+    producing: 'Your posting highlights aws, english, german, git, language, rag'.
+    """
+    if not highlights or len(highlights) < 2:
         return ""
-    skills = ", ".join(matched[:6])
-    return (f"Your posting highlights {skills} \u2014 {TIE_INS[variant_key]}.")
+    picked = highlights[:4]
+    skills = ", ".join(picked[:-1]) + f" and {picked[-1]}"
+    return f"Your posting calls for {skills} \u2014 {TIE_INS[variant_key]}."
 
 
 def build_cover_letter(variant_key: str, company: str, role: str, output_path: str,
-                       matched=None):
+                       matched=None, highlights=None):
+    validate()
+
     variant = VARIANTS[variant_key]
-    matched = matched or []
+    # Back-compat: older callers passed `matched` (raw tokens) only.
+    highlights = highlights if highlights is not None else (matched or [])
+    role_clean = clean_role_title(role, company)
 
     parts = [
         f"Berlin, {_german_date()}",
+        f"Application for the {role_clean} position",          # Betreff
         f"Dear Hiring Team at {company},",
-        (f"I'm writing to apply for the {role} position at {company}. "
-         f"{variant['summary']}"),
+        (f"I am writing to apply for the {role_clean} position at {company}. "
+         f"{variant['letter_intro']}"),
         HIGHLIGHTS[variant_key],
     ]
-    jd_line = _jd_line(variant_key, matched)
-    if jd_line:
-        parts.append(jd_line)
+
+    line = _highlight_line(variant_key, highlights)
+    if line:
+        parts.append(line)
+
     parts += [
-        "I've attached my resume with further detail on my experience and projects, "
-        "including CreditLens, SkillSync, and CoverCraft -- all live, self-deployed "
-        "applications. I'd welcome the chance to talk about how I could contribute to "
-        "your team.",
+        "I have attached my CV with further detail on my experience and projects, including "
+        "CreditLens, SkillSync and CoverCraft \u2014 all live, self-deployed applications. "
+        "I would welcome the chance to talk about how I could contribute to your team.",
         "Thank you for your consideration.",
         f"Best regards,\nSrikar Kodi\n{CONTACT['email']} | {CONTACT['phone']}",
     ]
-    text = "\n\n".join(parts)
 
     doc = Document()
-    for para in text.split("\n\n"):
+    section = doc.sections[0]          # A4, was defaulting to US Letter
+    section.page_height = Cm(29.7)
+    section.page_width = Cm(21.0)
+    section.top_margin = Cm(2.0)
+    section.bottom_margin = Cm(2.0)
+    section.left_margin = Cm(2.0)
+    section.right_margin = Cm(2.0)
+
+    style = doc.styles["Normal"]
+    style.font.name = "Calibri"
+    style.font.size = Pt(11)
+
+    for i, para in enumerate(parts):
         p = doc.add_paragraph()
         p.paragraph_format.space_after = Pt(10)
         r = p.add_run(para.strip())
         r.font.size = Pt(11)
+        if i == 1:                     # Betreff is bold
+            r.bold = True
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     doc.save(output_path)
     return output_path

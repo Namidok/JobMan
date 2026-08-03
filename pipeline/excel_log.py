@@ -21,7 +21,7 @@ from openpyxl.styles import Font
 COLUMNS = [
     "posting_hash", "source", "company", "title", "location",
     "date_posted", "date_collected", "jd_text", "apply_url",
-    "overlap_pct", "best_variant", "gaps", "status",
+    "overlap_pct", "best_variant", "gaps", "blockers", "status",
     "applied_date", "follow_up_date", "outcome", "resume_file",
 ]
 

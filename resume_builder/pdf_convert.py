@@ -25,11 +25,15 @@ def _find_soffice():
 
 
 def count_pdf_pages(pdf_path: str) -> int:
-    """Lightweight page count by scanning the PDF for page objects.
-    Heuristic -- good enough to warn about a resume spilling to 2 pages."""
-    with open(pdf_path, "rb") as f:
-        data = f.read()
-    return len(re.findall(rb"/Type\s*/Page[^s]", data))
+    """Exact page count via pypdf, falling back to the old byte-scan heuristic
+    if pypdf isn't installed."""
+    try:
+        from pypdf import PdfReader
+        return len(PdfReader(pdf_path).pages)
+    except Exception:
+        with open(pdf_path, "rb") as f:
+            data = f.read()
+        return len(re.findall(rb"/Type\s*/Page[^s]", data))
 
 
 def convert_to_pdf(docx_path: str, output_dir: str) -> str:

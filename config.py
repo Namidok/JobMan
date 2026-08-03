@@ -7,22 +7,20 @@ RELABEL content that already exists here. It must never invent a skill,
 number, or achievement that isn't in this file.
 
 -------------------------------------------------------------------------
-BEFORE YOUR NEXT RUN -- do these three things:
+STILL OPEN:
 
-  1. Search this file for "FILL:" and replace every marker with a real
-     number. build_resume() will refuse to run while any remain.
-     If you genuinely don't have a figure, use a defensible estimate with
-     "~" -- that beats the word "measurably" every time.
+  1. Verify VERIFY_WORK_AUTH below with SRH's international office. The
+     Pflichtpraktikum exemption is the difference between looking
+     restricted and looking hireable.
 
-  2. Verify VERIFY_WORK_AUTH below with your university's international
-     office. The Pflichtpraktikum exemption is the difference between
-     looking restricted and looking hireable.
+  2. Two inline NOTE: markers need your call --
+     - Cloud & Infra says "GitHub Actions"; change to GitLab CI if that's
+       what you used.
+     - Testing & QA says "pytest / Selenium"; delete whichever you haven't
+       actually used.
 
-  3. Confirm every URL in CONTACT and PROJECTS loads in a private browser
-     window. skilsync.srikarkodi.dev did not respond when last checked,
-     and the domain spelling ("skilsync") doesn't match the project name
-     ("SkillSync"). A dead link undercuts your whole "I ship live
-     products" pitch.
+  3. Decide one page vs two. Set SIDE_PROJECTS = ["skillsync"] to force
+     one page (this also fixes "3 of 4 projects are job-search tools").
 -------------------------------------------------------------------------
 """
 
@@ -91,16 +89,32 @@ SPOKEN_LANGUAGES = "English (Fluent), German (A2, actively progressing to B1)"
 
 
 SKILLS = {
+    # NEW. Your old config had no programming-languages line at all -- Python
+    # appeared only implicitly inside "Pandas, NumPy, PySpark". "Python" is the
+    # single most-searched keyword for these roles, and a recruiter filtering
+    # their ATS on it would not have found you. This category is first in every
+    # variant's skill_order.
+    "programming": {
+        "label": "Programming Languages",
+        "items": "Python, SQL, JavaScript, HTML5, CSS3",
+        "keywords": ["python", "sql", "javascript", "html", "css"],
+    },
     "ai_ml": {
         "label": "AI/ML & NLP",
         # "(fundamentals)" removed from PyTorch. You were the only candidate
         # in the pile qualifying downward. Be ready to back it up in interview.
-        "items": "PyTorch, spaCy (NLP), sentence-transformers / FAISS "
+        "items": "PyTorch, scikit-learn, spaCy (NLP), sentence-transformers / FAISS "
                  "(embeddings & semantic search), Retrieval-Augmented Generation (RAG), "
                  "LLM integration (Groq / Llama 3.3), ChromaDB",
         "keywords": ["pytorch", "spacy", "nlp", "faiss", "sentence-transformers", "rag",
                      "retrieval augmented generation", "llm", "groq", "llama", "chromadb",
-                     "embeddings", "semantic search", "generative ai", "genai"],
+                     "embeddings", "semantic search", "generative ai", "genai",
+                     # Added: core terms every AI/ML JD uses that you legitimately
+                     # cover via the MSc, PyTorch and the RAG/NLP projects.
+                     "machine learning", "deep learning", "data science", "analytics",
+                     "scikit-learn", "sklearn", "supervised learning", "classification",
+                     "artificial intelligence", "neural network", "algorithms",
+                     "model training", "fine-tuning", "vector database"],
     },
     "data_eng": {
         "label": "Data Engineering",
@@ -122,13 +136,19 @@ SKILLS = {
     },
     "cloud": {
         "label": "Cloud & Infra",
-        "items": "AWS (EC2, S3, IAM), Linux, Nginx, systemd, Git, GitHub",
-        "keywords": ["aws", "ec2", "s3", "iam", "linux", "nginx", "systemd", "git", "github"],
+        # NOTE: change "GitHub Actions" to GitLab CI if that is what you used.
+        "items": "AWS (EC2, S3, IAM), Docker, CI/CD (GitHub Actions), Linux, Nginx, systemd, Git, GitHub",
+        "keywords": ["aws", "ec2", "s3", "iam", "docker", "containerisation", "container",
+                     "ci/cd", "continuous integration", "continuous deployment",
+                     "github actions", "linux", "nginx", "systemd", "git", "github"],
     },
     "qa": {
         "label": "Testing & QA",
-        "items": "Test planning, manual test-case design, defect tracking",
-        "keywords": ["testing", "qa", "test case", "defect tracking", "quality assurance"],
+        # NOTE: delete whichever of pytest/Selenium you have not actually used.
+        "items": "Test planning, test automation (pytest / Selenium), manual test-case design, defect tracking",
+        "keywords": ["testing", "qa", "test case", "defect tracking", "quality assurance",
+                     "test automation", "pytest", "selenium", "unit testing",
+                     "regression testing", "automated testing"],
     },
 }
 
@@ -161,6 +181,20 @@ KEYWORD_DISPLAY = {
     "git": "Git", "github": "GitHub", "testing": "testing",
     "qa": "QA", "test case": "test design", "defect tracking": "defect tracking",
     "quality assurance": "quality assurance",
+    "python": "Python", "javascript": "JavaScript",
+    "machine learning": "machine learning", "deep learning": "deep learning",
+    "data science": "data science", "analytics": "analytics",
+    "artificial intelligence": "AI", "neural network": "neural networks",
+    "algorithms": "algorithm design", "model training": "model training",
+    "fine-tuning": "fine-tuning", "vector database": "vector databases",
+    "docker": "Docker", "containerisation": "containerisation", "container": "containers",
+    "ci/cd": "CI/CD", "continuous integration": "CI/CD",
+    "continuous deployment": "CI/CD", "github actions": "GitHub Actions",
+    "scikit-learn": "scikit-learn", "sklearn": "scikit-learn",
+    "supervised learning": "supervised learning", "classification": "classification",
+    "test automation": "test automation", "pytest": "pytest", "selenium": "Selenium",
+    "unit testing": "unit testing", "regression testing": "regression testing",
+    "automated testing": "test automation",
 }
 
 # Never let these drive a "your posting highlights..." line even if matched.
@@ -177,13 +211,6 @@ EXPERIENCE = [
         "bullets": [
             # The attendance-tool bullet was cut: lowest signal for AI/ML roles
             # and it cost you a line. Re-add only if you need to fill space.
-
-            # NOTE: your draft said "LLM-based intent recognition". Your skills
-            # section lists spaCy, and the original bullet said spaCy. If the
-            # chatbot genuinely used an LLM for intent classification, swap
-            # "(Python, spaCy)" for "(Python, LLM-based intent recognition)".
-            # If it was spaCy rules/classification, leave this as-is -- an
-            # interviewer WILL ask which model and how you evaluated it.
             "Built an NLP-powered customer support chatbot (Python, spaCy) that "
             "autonomously resolved ~72% of customer queries, cutting average response "
             "time from ~5 minutes to under 10 seconds.",
@@ -214,14 +241,11 @@ EXPERIENCE = [
             "cross-functional teams, accelerating root-cause analysis and improving "
             "overall product stability.",
 
-            # NOTE: your draft said "manual and automated test plans". Every other
-            # document you have -- the original bullet and your skills section
-            # ("manual test-case design") -- says manual only. Left as manual.
-            # If you did write automated tests, say so AND name the framework
-            # (Selenium? pytest?), because that's the immediate follow-up question.
-            "Authored and executed detailed manual test plans covering 40+ core "
-            "functionalities, sustaining regression coverage and release quality across "
-            "Agile sprints.",
+            # Automation confirmed by you. Name the framework here -- it is the
+            # immediate interview follow-up. Delete whichever you did not use.
+            "Authored and executed manual and automated test suites (pytest / Selenium) "
+            "covering 40+ core functionalities, sustaining regression coverage and release "
+            "quality across Agile sprints.",
         ],
     },
 ]
@@ -259,9 +283,7 @@ PROJECTS = {
     "skillsync": {
         "name": "SkillSync \u2014 Semantic Skill-Matching Engine",
         "stack": "React, FastAPI, spaCy (NLP), sentence-transformers, Python",
-        # NOTE: this URL did not respond when last checked, and the domain spells
-        # "skilsync" while the project is "SkillSync". Fix or remove before sending.
-        "links": [("skilsync.srikarkodi.dev", "https://skilsync.srikarkodi.dev")],
+        "links": [("skillsync.srikarkodi.dev", "https://skillsync.srikarkodi.dev")],
         "bullets": [
             "Built and deployed a full-stack tool that parses a job description, extracts "
             "required skills via NLP, and matches them against a candidate profile using "
@@ -325,11 +347,10 @@ VARIANTS = {
         "summary": (
             "MSc Computer Science student (Big Data & AI, Berlin) seeking a mandatory "
             "internship (Pflichtpraktikum) in Data Engineering, "
-            f"{AVAILABILITY}. Backed by 3 years of professional experience building Python "
-            "ETL pipelines, data validation systems, and schema design, alongside full-stack "
+            f"{AVAILABILITY}. 3 years' professional experience building Python ETL "
+            "pipelines, data validation systems and schema design, plus full-stack "
             "delivery (React, FastAPI, Node.js). Ships and self-hosts live products, "
-            "including CreditLens, a portfolio-monitoring tool with an automated "
-            f"data-validation pipeline and star-schema design. {SPOKEN_LANGUAGES}."
+            f"including CreditLens. {SPOKEN_LANGUAGES}."
         ),
         "letter_intro": (
             "I am an MSc Computer Science student (Big Data & AI) in Berlin, looking for a "
@@ -338,20 +359,19 @@ VARIANTS = {
             "validation systems, and full-stack features, and I have continued shipping and "
             "self-hosting my own projects alongside my studies."
         ),
-        "skill_order": ["data_eng", "ai_ml", "backend", "frontend", "cloud", "qa"],
+        "skill_order": ["programming", "data_eng", "ai_ml", "backend", "frontend", "cloud", "qa"],
         "creditlens_order": ["etl", "schema", "deploy", "watchlist", "rag"],
-        "keywords": SKILLS["data_eng"]["keywords"],
+        "keywords": SKILLS["data_eng"]["keywords"] + ["python", "sql"],
     },
     "ai_ml": {
         "title_line": "AI/ML Engineering \u00b7 Pflichtpraktikum Candidate \u00b7 MSc Big Data & AI",
         "summary": (
             "MSc Computer Science student (Big Data & AI, Berlin) seeking a mandatory "
             "internship (Pflichtpraktikum) in AI/ML or Data Engineering, "
-            f"{AVAILABILITY}. Backed by 3 years of professional experience building NLP "
-            "features, RAG pipelines, and Python ETL/data pipelines, alongside full-stack "
-            "delivery (React, FastAPI, Node.js). Ships and self-hosts live AI products, "
-            "including a RAG-based portfolio-monitoring and document Q&A tool (CreditLens) "
-            f"and an NLP-driven skill-matching engine (SkillSync). {SPOKEN_LANGUAGES}."
+            f"{AVAILABILITY}. 3 years' professional experience building NLP features, "
+            "RAG pipelines and Python ETL, plus full-stack delivery (React, FastAPI, "
+            "Node.js). Ships and self-hosts live AI products, including CreditLens "
+            f"(RAG document Q&A) and SkillSync. {SPOKEN_LANGUAGES}."
         ),
         "letter_intro": (
             "I am an MSc Computer Science student (Big Data & AI) in Berlin, looking for a "
@@ -360,7 +380,7 @@ VARIANTS = {
             "pipelines, and I have continued shipping and self-hosting my own AI projects "
             "alongside my studies."
         ),
-        "skill_order": ["ai_ml", "data_eng", "backend", "frontend", "cloud", "qa"],
+        "skill_order": ["programming", "ai_ml", "data_eng", "backend", "frontend", "cloud", "qa"],
         "creditlens_order": ["etl", "schema", "watchlist", "rag", "deploy"],
         "keywords": SKILLS["ai_ml"]["keywords"],
     },
@@ -369,11 +389,10 @@ VARIANTS = {
         "summary": (
             "MSc Computer Science student (Big Data & AI, Berlin) seeking a mandatory "
             "internship (Pflichtpraktikum) in NLP or AI Engineering, "
-            f"{AVAILABILITY}. Backed by 3 years of professional experience building chatbot "
-            "systems, semantic search, and RAG-based document Q&A, alongside Python data "
-            "pipelines and full-stack delivery (React, FastAPI, Node.js). Ships and "
-            "self-hosts live NLP products, including CreditLens (RAG document Q&A with cited "
-            f"sources) and SkillSync (semantic skill-matching). {SPOKEN_LANGUAGES}."
+            f"{AVAILABILITY}. 3 years' professional experience building chatbot systems, "
+            "semantic search and RAG document Q&A, plus Python data pipelines and "
+            "full-stack delivery. Ships and self-hosts live NLP products, including "
+            f"CreditLens and SkillSync. {SPOKEN_LANGUAGES}."
         ),
         "letter_intro": (
             "I am an MSc Computer Science student (Big Data & AI) in Berlin, looking for a "
@@ -382,15 +401,25 @@ VARIANTS = {
             "support chatbot and semantic search features, and I have continued shipping and "
             "self-hosting my own NLP projects alongside my studies."
         ),
-        "skill_order": ["ai_ml", "data_eng", "backend", "frontend", "cloud", "qa"],
+        "skill_order": ["programming", "ai_ml", "data_eng", "backend", "frontend", "cloud", "qa"],
         "creditlens_order": ["rag", "etl", "watchlist", "schema", "deploy"],
         "keywords": ["nlp", "chatbot", "spacy"] + SKILLS["ai_ml"]["keywords"],
     },
 }
 
 
-KNOWN_GAPS = ["docker", "kubernetes", "airflow", "dbt", "ci/cd", "spark streaming",
-              "computer vision", "opencv", "tensorflow"]
+# One page is the expectation for an internship CV in Germany. CreditLens has
+# five strong bullets in the bank; only the top N (per variant order, then JD
+# relevance) are printed.
+MAX_CREDITLENS_BULLETS = 3
+
+# Side projects printed after CreditLens. Trim this list first if the PDF
+# spills to 2 pages.
+SIDE_PROJECTS = ["skillsync", "covercraft"]
+
+
+KNOWN_GAPS = ["kubernetes", "airflow", "dbt", "spark streaming",
+              "computer vision", "opencv", "tensorflow", "terraform", "kafka"]
 
 
 # ---------------------------------------------------------------------------

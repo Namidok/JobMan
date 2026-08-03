@@ -9,13 +9,15 @@ What it does, in order:
      last 24 hours only, across every source.
   2. Normalize + dedupe against data/postings.xlsx (safe to re-run daily)
   3. Score each NEW posting (honest keyword-overlap, not a fake "ATS score")
-  4. Pick the best-fit resume variant (data_engineer / ai_ml / nlp)
-  5. Generate a tailored resume + cover letter, convert both to PDF, delete
+  4. Drop unwinnable postings (German C1 at A2, PhD-required, 5+ yrs) --
+     still logged with the reason, but no package built
+  5. Pick the best-fit resume variant (data_engineer / ai_ml / nlp)
+  6. Generate a tailored resume + cover letter, convert both to PDF, delete
      the intermediate docx
-  6. Save into applications/Company_Role_Date/ as:
+  7. Save into applications/Company_Role_Date/ as:
        SrikarKodi.pdf        <- resume
        Srikar_Kodi.pdf       <- cover letter
-   7. Log everything to data/postings.xlsx with a real clickable hyperlink
+  8. Log everything to data/postings.xlsx with a real clickable hyperlink
 
 Follow-up (after you apply):
     python main.py --mark-applied SHEET ROW          # mark a posting as applied
@@ -38,8 +40,8 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 from collectors import arbeitnow, indeed_loader
-from pipeline import scorer, excel_log, date_filter, followup
-from resume_builder.build import build_resume
+from pipeline import scorer, excel_log, date_filter, followup, blocker_filter
+from resume_builder.build import build_resume, build_resume_fitted
 from resume_builder.cover_letter import build_cover_letter
 from resume_builder.pdf_convert import convert_to_pdf, count_pdf_pages
 
@@ -98,6 +100,18 @@ def run(sources, min_overlap=0.0):
         p["overlap_pct"] = result["overlap_pct"]
         p["best_variant"] = result["best_variant"]
         p["gaps"] = ", ".join(result["gaps"]) if result["gaps"] else ""
+        p["_matched"] = result["matched"]
+        p["_highlights"] = result["highlights"]
+
+    # Hard blockers: postings you cannot win regardless of CV quality
+    # (German C1 at A2, PhD-required, 5+ years on an internship req).
+    # They are still logged -- with the reason -- but no package is built.
+    all_postings, blocked = blocker_filter.annotate(all_postings)
+    if blocked:
+        print(f"\n{len(blocked)} posting(s) skipped as unwinnable:")
+        for b in blocked:
+            print(f"  - {b['company']} | {b['title']}  ->  {b['blockers']}")
+        excel_log.append_postings(XLSX_PATH, blocked)
 
     new_rows = excel_log.append_postings(XLSX_PATH, all_postings)
     print(f"{len(new_rows)} NEW postings added to {XLSX_PATH} (duplicates skipped).\n")
@@ -112,10 +126,6 @@ def run(sources, min_overlap=0.0):
     today = date.today().isoformat()
 
     for row in new_rows:
-        folder_name = safe_folder_name(row["company"], row["title"], today)
-        folder_path = os.path.join(APPLICATIONS_DIR, folder_name)
-        os.makedirs(folder_path, exist_ok=True)
-
         variant = row["best_variant"] or "ai_ml"
 
         pct = _overlap_sort_key(row)
@@ -124,15 +134,23 @@ def run(sources, min_overlap=0.0):
                   f"at {pct}% < {min_overlap}% minimum -- logged but no folder made)")
             continue
 
-        # Resume keywords that actually appear in THIS JD -- drives truthful
-        # reordering in the resume and the JD-specific line in the cover letter.
-        matched = scorer.score_posting(row.get("jd_text", ""), row.get("title", ""))["matched"]
+        # makedirs moved BELOW the threshold check -- it used to run first, so
+        # skipped postings still got an empty folder while the message said
+        # otherwise.
+        folder_name = safe_folder_name(row["company"], row["title"], today)
+        folder_path = os.path.join(APPLICATIONS_DIR, folder_name)
+        os.makedirs(folder_path, exist_ok=True)
+
+        # Reuse the scores computed above rather than re-scoring.
+        matched = row.get("_matched", [])
+        highlights = row.get("_highlights", [])
 
         resume_docx = os.path.join(folder_path, f"{RESUME_FILENAME}.docx")
         cover_docx = os.path.join(folder_path, f"{COVER_LETTER_FILENAME}.docx")
 
-        build_resume(variant, resume_docx, matched=matched)
-        build_cover_letter(variant, row["company"], row["title"], cover_docx, matched=matched)
+        build_resume_fitted(variant, resume_docx, matched=matched)
+        build_cover_letter(variant, row["company"], row["title"], cover_docx,
+                           matched=matched, highlights=highlights)
 
         try:
             resume_pdf = convert_to_pdf(resume_docx, folder_path)
