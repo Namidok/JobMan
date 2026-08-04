@@ -198,6 +198,16 @@ def _line(row):
             f"[{row['sheet']} row {row['row']}]  {row['apply_url'] or ''}")
 
 
+def _pct_key(row):
+    """Numeric sort key for overlap_pct, tolerant of None/'' /'12.1%'."""
+    raw = row.get("overlap_pct")
+    if raw is None or raw == "":
+        return 0.0
+    try:
+        return float(str(raw).strip().rstrip("%"))
+    except (TypeError, ValueError):
+        return 0.0
+
 def render_report(xlsx_path):
     rows = load_rows(xlsx_path)
     if not rows:
@@ -222,7 +232,9 @@ def render_report(xlsx_path):
         print(_line(r))
 
     print(f"\n== {len(report['not_applied'])} never applied ==")
-    for r in sorted(report["not_applied"], key=lambda x: str(x["overlap_pct"] or 0), reverse=True):
+    # BUG FIX: this sorted overlap_pct as a STRING, so "9.5" ranked above
+    # "85.0" and your best unapplied match sank below a 9% one.
+    for r in sorted(report["not_applied"], key=_pct_key, reverse=True):
         pct = r["overlap_pct"] if r["overlap_pct"] is not None else ""
         print(f"- {r['company']} | {r['title']} ({pct}% match)  "
               f"[{r['sheet']} row {r['row']}]  {r['apply_url'] or ''}")

@@ -122,7 +122,7 @@ def append_postings(xlsx_path, postings):
             "outcome": p.get("outcome", ""),
             "resume_file": p.get("resume_file", ""),
         }
-        ws.append([row[c] for c in COLUMNS])
+        ws.append([row.get(c, "") for c in COLUMNS])
 
         if clean_url:
             cell = ws.cell(row=ws.max_row, column=APPLY_URL_COL_INDEX)

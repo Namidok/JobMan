@@ -6,6 +6,7 @@ FIX: this previously only filtered by domain keyword, with NO check for
 internship status -- meaning it could silently include full-time roles.
 """
 
+import re
 import requests
 import sys
 import os
@@ -19,9 +20,94 @@ KEYWORDS = ["data engineer", "machine learning", "ai engineer", "nlp", "data sci
             "artificial intelligence", "genai", "llm", "praktikum", "werkstudent", "intern"]
 
 
+# ---------------------------------------------------------------------------
+# GERMANY FILTER
+#
+# BUG FIX: this used to be `if "germany" not in (title + description)`.
+# The `location` field was fetched and never checked, so a Berlin posting
+# whose description never literally says "Germany" -- which is most of them
+# -- was silently dropped before it was ever scored. That was starving the
+# whole pipeline of volume.
+#
+# Arbeitnow is a DACH/EU board, so it is not enough to look for German
+# cities: Vienna and Zurich appear too and must be excluded explicitly.
+# ---------------------------------------------------------------------------
+
+GERMAN_CITIES = {
+    "berlin", "munich", "muenchen", "munchen", "hamburg", "frankfurt", "cologne",
+    "koeln", "koln", "stuttgart", "dusseldorf", "duesseldorf", "dortmund", "essen",
+    "leipzig", "bremen", "dresden", "hannover", "hanover", "nuremberg", "nurnberg",
+    "nuernberg", "duisburg", "bochum", "wuppertal", "bielefeld", "bonn", "munster",
+    "muenster", "karlsruhe", "mannheim", "augsburg", "wiesbaden", "braunschweig",
+    "kiel", "chemnitz", "aachen", "halle", "magdeburg", "freiburg", "krefeld",
+    "mainz", "lubeck", "luebeck", "erfurt", "rostock", "kassel", "potsdam",
+    "saarbrucken", "saarbruecken", "heidelberg", "darmstadt", "regensburg",
+    "ingolstadt", "wurzburg", "wuerzburg", "ulm", "jena", "osnabruck", "osnabrueck",
+    "heilbronn", "wolfsburg", "gottingen", "goettingen", "koblenz", "trier",
+    "paderborn", "siegen", "hildesheim", "tubingen", "tuebingen", "konstanz",
+    "bamberg", "walldorf", "eschborn", "leverkusen", "ludwigshafen",
+}
+
+# Same board carries Austria/Switzerland/EU-remote. Reject these outright.
+NON_GERMAN_MARKERS = {
+    "austria", "osterreich", "oesterreich", "vienna", "wien", "graz", "linz", "salzburg",
+    "switzerland", "schweiz", "zurich", "zuerich", "basel", "bern", "geneva", "lausanne",
+    "netherlands", "amsterdam", "rotterdam", "utrecht", "eindhoven", "hague",
+    "poland", "warsaw", "krakow", "wroclaw", "spain", "madrid", "barcelona", "valencia",
+    "france", "paris", "lyon", "toulouse", "united kingdom", "london", "manchester",
+    "ireland", "dublin", "portugal", "lisbon", "porto", "italy", "milan", "rome",
+    "belgium", "brussels", "denmark", "copenhagen", "sweden", "stockholm",
+    "norway", "oslo", "finland", "helsinki", "czech", "prague", "hungary", "budapest",
+    "romania", "bucharest", "bulgaria", "sofia", "greece", "athens", "estonia", "tallinn",
+    "united states", "usa", "canada", "india", "singapore",
+}
+
+
+def _norm(text):
+    """Lowercase and strip umlauts so 'München' matches 'muenchen'/'munchen'."""
+    t = (text or "").lower()
+    for a, b in [("\u00e4", "a"), ("\u00f6", "o"), ("\u00fc", "u"), ("\u00df", "ss")]:
+        t = t.replace(a, b)
+    return t
+
+
+def _has_word(word, text):
+    return re.search(r"\b" + re.escape(word) + r"\b", text) is not None
+
+
+def is_germany(location, title="", description=""):
+    """True when the posting is plausibly in Germany.
+
+    Order matters: an explicit non-German marker in `location` wins, so a
+    'Vienna, Austria' role is rejected even if the description name-drops
+    Germany somewhere.
+    """
+    loc = _norm(location)
+    text = _norm(f"{title} {description}")
+
+    if any(_has_word(m, loc) for m in NON_GERMAN_MARKERS):
+        return False
+    if _has_word("germany", loc) or _has_word("deutschland", loc):
+        return True
+    if any(_has_word(c, loc) for c in GERMAN_CITIES):
+        return True
+
+    # Remote roles often carry no city -- fall back to the body text, but only
+    # if nothing there points at another country.
+    if any(_has_word(m, text) for m in NON_GERMAN_MARKERS):
+        return False
+    if _has_word("germany", text) or _has_word("deutschland", text):
+        return True
+    if any(_has_word(c, text) for c in GERMAN_CITIES):
+        return True
+    return False
+
+
 def fetch_postings(keywords=None, germany_only=True):
     keywords = keywords or KEYWORDS
     results = []
+    keyword_hits = 0
+    non_german = 0
     page = 1
     while True:
         resp = requests.get(API_URL, params={"page": page}, timeout=20)
@@ -39,7 +125,9 @@ def fetch_postings(keywords=None, germany_only=True):
 
             if not any(kw in combined for kw in keywords):
                 continue
-            if germany_only and "germany" not in combined:
+            keyword_hits += 1
+            if germany_only and not is_germany(location, title, desc):
+                non_german += 1
                 continue
 
             results.append({
@@ -56,9 +144,13 @@ def fetch_postings(keywords=None, germany_only=True):
         if page > 5:
             break
 
+    if germany_only:
+        print(f"Arbeitnow: {keyword_hits} keyword matches, "
+              f"{non_german} dropped as outside Germany, {len(results)} remain")
+
     before_relevance = len(results)
     results, stats = filter_relevant(results, require_internship_title=True)
-    print(f"Arbeitnow: {before_relevance} keyword matches, "
+    print(f"Arbeitnow: {before_relevance} in Germany, "
           f"{stats['after_internship_filter']} are internships, "
           f"{stats['after_domain_filter']} are also AI/Data/ML-relevant")
 
