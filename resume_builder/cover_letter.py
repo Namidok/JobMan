@@ -37,6 +37,7 @@ TIE_INS = {
     "data_engineer": "the same tools behind my Python ETL and data-validation work on CreditLens",
     "ai_ml": "tools I've applied in production NLP and RAG systems",
     "nlp": "tools I've applied across my NLP systems and RAG document Q&A work",
+    "software_eng": "the stack I have shipped production features in",
 }
 
 HIGHLIGHTS = {
@@ -50,6 +51,12 @@ HIGHLIGHTS = {
         "with a RAG layer (sentence-transformers, ChromaDB, Groq/Llama 3.3) that answers "
         "questions over financial documents with cited sources and declines to answer when "
         "the context doesn't support it."
+    ),
+    "software_eng": (
+        "My most recent project, CreditLens, is an application I scoped, built and shipped "
+        "end to end: a Python backend with a validation pipeline, a SQL schema designed for "
+        "time-series comparison, and a Next.js + FastAPI frontend deployed on AWS EC2 behind "
+        "Nginx with systemd process management."
     ),
     "nlp": (
         "My work spans several NLP systems in production, from a support chatbot that "

@@ -91,7 +91,12 @@ def score_posting(jd_text: str, job_title: str = ""):
         variant_scores[vname] = body_hits + title_hits
 
     # Direct title-phrase overrides beat keyword scoring entirely.
-    if "data engineer" in title_lower or "data engineering" in title_lower:
+    swe_title = any(t in title_lower for t in [
+        "software", "softwareentwicklung", "developer", "entwickler", "backend",
+        "frontend", "full stack", "fullstack", "full-stack", "web develop"])
+    if swe_title and not any(t in title_lower for t in ["data", "ml ", "machine learning", "ai "]):
+        best_variant = "software_eng"
+    elif "data engineer" in title_lower or "data engineering" in title_lower:
         best_variant = "data_engineer"
     elif _word_match("nlp", job_title):
         best_variant = "nlp"

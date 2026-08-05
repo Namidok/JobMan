@@ -21,18 +21,39 @@ from openpyxl.styles import Font
 COLUMNS = [
     "posting_hash", "source", "company", "title", "location",
     "date_posted", "date_collected", "jd_text", "apply_url",
-    "overlap_pct", "best_variant", "gaps", "blockers", "status",
+    "overlap_pct", "best_variant", "gaps", "status",
     "applied_date", "follow_up_date", "outcome", "resume_file",
 ]
 
 APPLY_URL_COL_INDEX = COLUMNS.index("apply_url") + 1
 
 
-def _hash_posting(company, title):
-    norm_company = " ".join(company.strip().lower().split())
-    norm_title = " ".join(title.strip().lower().split())
-    key = f"{norm_company}|{norm_title}"
+def _hash_posting(company, title, location="", apply_url=""):
+    """Identity of a posting.
+
+    BUG FIX: this used to hash company|title only. A company posting the SAME
+    role in Berlin, Munich and Frankfurt collapsed into a single row -- you
+    only ever saw one of the three. Location is now part of the identity.
+
+    The apply_url is the strongest signal when present (it is unique per
+    posting), so it wins. Query strings are stripped first so tracking
+    parameters don't make the same posting look new on every run.
+    """
+    url = _strip_query(apply_url)
+    if url:
+        return hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
+
+    norm = lambda x: " ".join((x or "").strip().lower().split())
+    key = f"{norm(company)}|{norm(title)}|{norm(location)}"
     return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+
+
+def _strip_query(url):
+    """Drop ?tracking=... so the same posting hashes identically each run."""
+    u = (url or "").strip()
+    if not u or u.lower().startswith("n/a"):
+        return ""
+    return u.split("?")[0].split("#")[0].rstrip("/")
 
 
 def _clean_url(url):
@@ -96,7 +117,8 @@ def append_postings(xlsx_path, postings):
     today = date.today().isoformat()
 
     for p in postings:
-        h = _hash_posting(p["company"], p["title"])
+        h = _hash_posting(p["company"], p["title"],
+                          p.get("location", ""), p.get("apply_url", ""))
         if h in existing:
             continue
         existing.add(h)
@@ -122,7 +144,7 @@ def append_postings(xlsx_path, postings):
             "outcome": p.get("outcome", ""),
             "resume_file": p.get("resume_file", ""),
         }
-        ws.append([row.get(c, "") for c in COLUMNS])
+        ws.append([row[c] for c in COLUMNS])
 
         if clean_url:
             cell = ws.cell(row=ws.max_row, column=APPLY_URL_COL_INDEX)

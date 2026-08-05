@@ -7,20 +7,22 @@ RELABEL content that already exists here. It must never invent a skill,
 number, or achievement that isn't in this file.
 
 -------------------------------------------------------------------------
-STILL OPEN:
+BEFORE YOUR NEXT RUN -- do these three things:
 
-  1. Verify VERIFY_WORK_AUTH below with SRH's international office. The
-     Pflichtpraktikum exemption is the difference between looking
-     restricted and looking hireable.
+  1. Search this file for "FILL:" and replace every marker with a real
+     number. build_resume() will refuse to run while any remain.
+     If you genuinely don't have a figure, use a defensible estimate with
+     "~" -- that beats the word "measurably" every time.
 
-  2. Two inline NOTE: markers need your call --
-     - Cloud & Infra says "GitHub Actions"; change to GitLab CI if that's
-       what you used.
-     - Testing & QA says "pytest / Selenium"; delete whichever you haven't
-       actually used.
+  2. Verify VERIFY_WORK_AUTH below with your university's international
+     office. The Pflichtpraktikum exemption is the difference between
+     looking restricted and looking hireable.
 
-  3. Decide one page vs two. Set SIDE_PROJECTS = ["skillsync"] to force
-     one page (this also fixes "3 of 4 projects are job-search tools").
+  3. Confirm every URL in CONTACT and PROJECTS loads in a private browser
+     window. skilsync.srikarkodi.dev did not respond when last checked,
+     and the domain spelling ("skilsync") doesn't match the project name
+     ("SkillSync"). A dead link undercuts your whole "I ship live
+     products" pitch.
 -------------------------------------------------------------------------
 """
 
@@ -97,7 +99,8 @@ SKILLS = {
     "programming": {
         "label": "Programming Languages",
         "items": "Python, SQL, JavaScript, HTML5, CSS3",
-        "keywords": ["python", "sql", "javascript", "html", "css"],
+        "keywords": ["python", "sql", "javascript", "html", "css",
+                     "programmierung", "softwareentwicklung"],
     },
     "ai_ml": {
         "label": "AI/ML & NLP",
@@ -112,6 +115,9 @@ SKILLS = {
                      # Added: core terms every AI/ML JD uses that you legitimately
                      # cover via the MSc, PyTorch and the RAG/NLP projects.
                      "machine learning", "deep learning", "data science", "analytics",
+                     # German aliases -- many DE postings never use the English term
+                     "maschinelles lernen", "k\u00fcnstliche intelligenz", "datenanalyse",
+                     "datenaufbereitung", "datenverarbeitung", "neuronale netze",
                      "scikit-learn", "sklearn", "supervised learning", "classification",
                      "artificial intelligence", "neural network", "algorithms",
                      "model training", "fine-tuning", "vector database"],
@@ -122,6 +128,7 @@ SKILLS = {
                  "star-schema design, PostgreSQL, SQLite",
         "keywords": ["pandas", "numpy", "pyspark", "etl", "data pipeline", "data validation",
                      "star schema", "postgresql", "postgres", "sqlite", "data engineering",
+                     "datenpipeline", "datenbank", "datenmodellierung",
                      "data warehouse", "sql"],
     },
     "backend": {
@@ -211,6 +218,13 @@ EXPERIENCE = [
         "bullets": [
             # The attendance-tool bullet was cut: lowest signal for AI/ML roles
             # and it cost you a line. Re-add only if you need to fill space.
+
+            # NOTE: your draft said "LLM-based intent recognition". Your skills
+            # section lists spaCy, and the original bullet said spaCy. If the
+            # chatbot genuinely used an LLM for intent classification, swap
+            # "(Python, spaCy)" for "(Python, LLM-based intent recognition)".
+            # If it was spaCy rules/classification, leave this as-is -- an
+            # interviewer WILL ask which model and how you evaluated it.
             "Built an NLP-powered customer support chatbot (Python, spaCy) that "
             "autonomously resolved ~72% of customer queries, cutting average response "
             "time from ~5 minutes to under 10 seconds.",
@@ -384,6 +398,29 @@ VARIANTS = {
         "creditlens_order": ["etl", "schema", "watchlist", "rag", "deploy"],
         "keywords": SKILLS["ai_ml"]["keywords"],
     },
+    "software_eng": {
+        "title_line": "Software Engineering \u00b7 Pflichtpraktikum Candidate \u00b7 MSc Big Data & AI",
+        "summary": (
+            "MSc Computer Science student (Big Data & AI, Berlin) seeking a mandatory "
+            "internship (Pflichtpraktikum) in Software Engineering, "
+            f"{AVAILABILITY}. 3 years' professional experience shipping production "
+            "full-stack features (React, Node.js, FastAPI, Flask) to a platform serving "
+            "40,000+ monthly users, plus Python data pipelines and automated testing. "
+            f"Ships and self-hosts live applications end to end. {SPOKEN_LANGUAGES}."
+        ),
+        "letter_intro": (
+            "I am an MSc Computer Science student (Big Data & AI) in Berlin, looking for a "
+            "mandatory internship (Pflichtpraktikum) in software engineering. Before starting "
+            "my Master's I spent three years building and shipping production full-stack "
+            "features, and I have continued designing, building and self-hosting my own "
+            "applications end to end alongside my studies."
+        ),
+        "skill_order": ["programming", "backend", "frontend", "cloud", "data_eng", "ai_ml", "qa"],
+        "creditlens_order": ["deploy", "etl", "schema", "watchlist", "rag"],
+        "keywords": (SKILLS["backend"]["keywords"] + SKILLS["frontend"]["keywords"]
+                     + ["python", "sql", "git", "docker", "ci/cd", "rest api",
+                        "software", "softwareentwicklung", "developer", "entwickler"]),
+    },
     "nlp": {
         "title_line": "NLP Engineering \u00b7 Pflichtpraktikum Candidate \u00b7 MSc Big Data & AI",
         "summary": (
@@ -410,7 +447,8 @@ VARIANTS = {
 
 # One page is the expectation for an internship CV in Germany. CreditLens has
 # five strong bullets in the bank; only the top N (per variant order, then JD
-# relevance) are printed.
+# relevance) are printed. Raise this only if the PDF still fits on one page --
+# build.py prints the page count after conversion.
 MAX_CREDITLENS_BULLETS = 3
 
 # Side projects printed after CreditLens. Trim this list first if the PDF
