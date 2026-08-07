@@ -42,9 +42,9 @@ TIE_INS = {
 
 HIGHLIGHTS = {
     "data_engineer": (
-        "My most recent project, CreditLens, is a private-credit portfolio monitoring tool "
-        "with a Python ETL pipeline that validates and repairs inconsistently formatted "
-        "financial data, backed by a star-schema SQLite design and deployed on AWS EC2."
+        "My most recent project, Stadtanalyse, is an end-to-end streaming data platform: Kafka "
+        "into a Delta Lake medallion architecture, Spark batch processing, Great Expectations "
+        "quality suites, dbt gold marts and an XGBoost model, all orchestrated by Airflow."
     ),
     "ai_ml": (
         "My most recent project, CreditLens, combines a Python ETL/data-validation pipeline "
@@ -140,7 +140,8 @@ def build_cover_letter(variant_key: str, company: str, role: str, output_path: s
 
     parts += [
         "I have attached my CV with further detail on my experience and projects, including "
-        "CreditLens, SkillSync and CoverCraft \u2014 all live, self-deployed applications. "
+        "CreditLens, Stadtanalyse and PipelineGuardian \u2014 all live, self-deployed "
+        "applications. "
         "I would welcome the chance to talk about how I could contribute to your team.",
         "Thank you for your consideration.",
         f"Best regards,\nSrikar Kodi\n{CONTACT['email']} | {CONTACT['phone']}",

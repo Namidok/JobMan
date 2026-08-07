@@ -21,11 +21,11 @@ import re
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from config import (CONTACT, WORK_AUTH, SKILLS, EXPERIENCE, PROJECTS, EDUCATION,
-                    VARIANTS, SPOKEN_LANGUAGES, MAX_CREDITLENS_BULLETS, SIDE_PROJECTS,
+from config import (CONTACT, WORK_AUTH, SHOW_WORK_AUTH_ON_RESUME, SKILLS, EXPERIENCE, PROJECTS, EDUCATION,
+                    VARIANTS, SPOKEN_LANGUAGES, PROJECT_BULLET_CAP, SIDE_PROJECTS,
                     validate)
 
-# Body font size. The page fitter steps this down before it cuts content --
+# Body font size. The one-page fitter steps this down before it cuts content --
 # losing 0.5pt is cheaper than losing a bullet.
 BODY_PT = 10.0
 
@@ -248,13 +248,16 @@ def build_resume(variant_key: str, output_path: str, matched=None):
     sep = p.add_run("   |   "); sep.font.size = Pt(9); sep.font.color.rgb = GREY
     _add_hyperlink(p, CONTACT["github_label"], CONTACT["github"])
 
-    # Work auth
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p.paragraph_format.space_after = Pt(8)
-    r = p.add_run(WORK_AUTH)
-    r.font.size = Pt(8.5)
-    r.font.color.rgb = GREY
+    # Work auth -- off by default now (SHOW_WORK_AUTH_ON_RESUME in config.py)
+    if SHOW_WORK_AUTH_ON_RESUME:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.space_after = Pt(8)
+        r = p.add_run(WORK_AUTH)
+        r.font.size = Pt(8.5)
+        r.font.color.rgb = GREY
+    else:
+        doc.paragraphs[-1].paragraph_format.space_after = Pt(8)
 
     # Summary
     _section_heading(doc, "SUMMARY")
@@ -291,23 +294,28 @@ def build_resume(variant_key: str, output_path: str, matched=None):
         for b in bullets:
             _bullet(doc, b)
 
-    # Projects
+    # Projects -- order and bullet emphasis are both per-variant, so a data
+    # posting leads with CityPulse while an AI posting leads with CreditLens.
     _section_heading(doc, "PROJECTS")
-    creditlens = PROJECTS["creditlens"]
-    _project_header(doc, creditlens["name"], creditlens["stack"])
-    _link_line(doc, creditlens["links"])
-    creditlens_bullets = [creditlens["bullets_bank"][key] for key in variant["creditlens_order"]]
-    creditlens_bullets.sort(key=lambda b: _hit_count(b, matched), reverse=True)
-    creditlens_bullets = creditlens_bullets[:MAX_CREDITLENS_BULLETS]   # page control
-    for b in creditlens_bullets:
-        _bullet(doc, b)
+    order = variant.get("project_order") or (["creditlens"] + list(SIDE_PROJECTS))
+    bullet_order = variant.get("bullet_order", {})
 
-    for proj_key in SIDE_PROJECTS:
+    for proj_key in order:
         proj = PROJECTS[proj_key]
         _project_header(doc, proj["name"], proj["stack"])
         _link_line(doc, proj["links"])
-        for b in proj["bullets"]:
-            _bullet(doc, b)
+
+        bank = proj.get("bullets_bank")
+        if bank:
+            keys = bullet_order.get(proj_key) or list(bank.keys())
+            bl = [bank[k] for k in keys if k in bank]
+            bl.sort(key=lambda t: _hit_count(t, matched), reverse=True)
+            bl = bl[:PROJECT_BULLET_CAP]
+        else:
+            bl = proj.get("bullets", [])
+
+        for t in bl:
+            _bullet(doc, t)
 
     # Education
     _section_heading(doc, "EDUCATION")
@@ -326,6 +334,12 @@ def build_resume(variant_key: str, output_path: str, matched=None):
     return output_path
 
 
+if __name__ == "__main__":
+    for v in ["data_engineer", "ai_ml", "nlp"]:
+        out = build_resume(v, os.path.join(os.path.dirname(__file__), "..", "data", f"preview_{v}.docx"))
+        print("built", out)
+
+
 # ---------------------------------------------------------------------------
 # Page fitter
 #
@@ -341,20 +355,19 @@ def build_resume(variant_key: str, output_path: str, matched=None):
 # ---------------------------------------------------------------------------
 
 FIT_LADDER = [
-    (MAX_CREDITLENS_BULLETS, list(SIDE_PROJECTS), 10.0, "full content"),
-    (MAX_CREDITLENS_BULLETS, list(SIDE_PROJECTS), 9.5, "body text at 9.5pt"),
-    (3, list(SIDE_PROJECTS), 9.5, "9.5pt, CreditLens capped at 3 bullets"),
-    (3, list(SIDE_PROJECTS), 9.0, "9pt, CreditLens capped at 3 bullets"),
+    (PROJECT_BULLET_CAP, 10.0, "full content"),
+    (PROJECT_BULLET_CAP, 9.5, "body text at 9.5pt"),
+    (2, 9.5, "9.5pt, 2 bullets per project"),
+    (2, 9.0, "9pt, 2 bullets per project"),
 ]
 
 
-def _render_and_count(variant_key, output_path, matched, cl_n, sides, pt):
+def _render_and_count(variant_key, output_path, matched, cap, pt):
     import tempfile
     import resume_builder.build as _self
     from resume_builder.pdf_convert import convert_to_pdf, count_pdf_pages
 
-    _self.MAX_CREDITLENS_BULLETS = cl_n
-    _self.SIDE_PROJECTS = sides
+    _self.PROJECT_BULLET_CAP = cap
     _self.BODY_PT = pt
     build_resume(variant_key, output_path, matched=matched)
     with tempfile.TemporaryDirectory() as tmp:
@@ -368,10 +381,10 @@ def build_resume_fitted(variant_key, output_path, matched=None, verbose=True):
     """
     import resume_builder.build as _self
 
-    original = (_self.MAX_CREDITLENS_BULLETS, list(_self.SIDE_PROJECTS), _self.BODY_PT)
+    original = (_self.PROJECT_BULLET_CAP, _self.BODY_PT)
     try:
-        for cl_n, sides, pt, label in FIT_LADDER:
-            pages = _render_and_count(variant_key, output_path, matched, cl_n, sides, pt)
+        for cap, pt, label in FIT_LADDER:
+            pages = _render_and_count(variant_key, output_path, matched, cap, pt)
             if pages <= 1:
                 if verbose and label != "full content":
                     print(f"  (fitted to one page: {label})")
@@ -381,20 +394,12 @@ def build_resume_fitted(variant_key, output_path, matched=None, verbose=True):
         # content rather than shipping the tightest, ugliest version.
         pages = _render_and_count(variant_key, output_path, matched, *original)
         if verbose:
-            print(f"  ({pages} pages at full content. To force one page, drop a side "
-                  f"project via SIDE_PROJECTS in config.py.)")
+            print(f"  ({pages} pages at full content \u2014 fine for a CV with three "
+                  f"projects. Lower PROJECT_BULLET_CAP in config.py to force one.)")
         return output_path, pages, "full content, 2 pages"
     finally:
-        (_self.MAX_CREDITLENS_BULLETS, _self.SIDE_PROJECTS, _self.BODY_PT) = original
+        (_self.PROJECT_BULLET_CAP, _self.BODY_PT) = original
 
 
 # Backwards-compatible alias
 build_resume_one_page = build_resume_fitted
-
-
-if __name__ == "__main__":
-    for v in ["data_engineer", "ai_ml", "nlp"]:
-        out = build_resume(
-            v, os.path.join(os.path.dirname(__file__), "..", "data", f"preview_{v}.docx")
-        )
-        print("built", out)

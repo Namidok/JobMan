@@ -71,7 +71,10 @@ WORK_AUTH_NEUTRAL = (
     "required part of my MSc programme."
 )
 
+# Removed from the resume header -- it read as vague and ate a line at the top.
+# Kept here because the cover letter and application forms still need it.
 WORK_AUTH = WORK_AUTH_CONFIRMED if VERIFY_WORK_AUTH else WORK_AUTH_NEUTRAL
+SHOW_WORK_AUTH_ON_RESUME = False
 
 
 # It is now August 2026 -- "available from August 2026" reads as a future
@@ -294,6 +297,55 @@ PROJECTS = {
                   ("github.com/Namidok/CreditLens", "https://github.com/Namidok/CreditLens")],
         "bullets_bank": CREDITLENS_BULLETS,
     },
+    "stadtanalyse": {
+        "name": "Stadtanalyse \u2014 Urban Mobility Data Lake & Analytics Platform",
+        "stack": "Kafka \u00b7 Spark Structured Streaming \u00b7 Delta Lake \u00b7 dbt \u00b7 Airflow \u00b7 PostgreSQL \u00b7 XGBoost \u00b7 FastAPI \u00b7 React",
+        "links": [("stadtanalyse.srikarkodi.dev", "https://stadtanalyse.srikarkodi.dev"),
+                  ("github.com/Namidok/Stadtanalyse", "https://github.com/Namidok/Stadtanalyse")],
+        "bullets_bank": {
+            "platform": "Built an end-to-end streaming data platform ingesting real-time transit, weather "
+                        "and city-event feeds through 4 Kafka topics into a Delta Lake medallion "
+                        "architecture on MinIO (bronze \u2192 silver \u2192 gold), orchestrated end to end by an "
+                        "Apache Airflow DAG.",
+            "dbt":      "Modelled the gold layer in dbt \u2014 staging views into dimension and fact tables, "
+                        "then six analytical marts (route reliability, delay trends, congestion hotspots, "
+                        "weather impact, events impact, ML features) with schema and source tests.",
+            "quality":  "Integrated Great Expectations with versioned expectation suites per table, run "
+                        "against the Silver layer with results published to a queryable quality schema so "
+                        "every batch's outcome stays auditable.",
+            "ml":       "Trained and served an XGBoost delay-prediction model on features built by dbt, "
+                        "retrained on schedule by the same Airflow DAG and exposed through a FastAPI "
+                        "endpoint.",
+            "serve":    "Served the platform through FastAPI and a React/Vite dashboard with a live "
+                        "vehicle map (Leaflet) and time-series charts, instrumented with Prometheus and "
+                        "Grafana.",
+        },
+    },
+    "pipeline_guardian": {
+        "name": "PipelineGuardian \u2014 Data-Quality Gateway & Drift Detection",
+        "stack": "Python \u00b7 Apache Airflow \u00b7 PostgreSQL \u00b7 Docker \u00b7 Pandas \u00b7 SciPy",
+        "links": [("pipelineguardian.srikarkodi.dev", "https://pipelineguardian.srikarkodi.dev"),
+                  ("github.com/Namidok/PipeLine_Guardian", "https://github.com/Namidok/PipeLine_Guardian")],
+        "bullets_bank": {
+            "gateway": "Built a data-quality gateway that validates daily batches before they reach the "
+                       "warehouse \u2014 schema conformance, per-column null-rate thresholds, duplicate "
+                       "detection and business rules \u2014 routing clean batches to a curated table and "
+                       "failures to quarantine with a human-readable reason for each rejection.",
+            "drift":   "Implemented statistical drift detection using a two-sample Kolmogorov\u2013Smirnov "
+                       "test (SciPy) against a rolling baseline of previously-passed batches, flagging "
+                       "p < 0.01 \u2014 the only check that catches a batch where every individual row is "
+                       "valid but the distribution has shifted.",
+            "airflow": "Orchestrated with an Apache Airflow 2.9 DAG (@daily, 2 retries with backoff) "
+                       "running in Docker, deliberately kept thin so the pipeline logic stays testable "
+                       "outside Airflow.",
+            "schema":  "Designed a PostgreSQL 16 schema (clean, quarantine, audit_log, batch_stats) that "
+                       "writes a full JSON validation report per run, making any batch's outcome "
+                       "auditable months after it ran.",
+            "synth":   "Built a synthetic data generator with four controllable failure modes (null "
+                       "spike, statistical drift, schema drift, duplicates) so every validator can be "
+                       "proven against a scenario with a known cause.",
+        },
+    },
     "skillsync": {
         "name": "SkillSync \u2014 Semantic Skill-Matching Engine",
         "stack": "React, FastAPI, spaCy (NLP), sentence-transformers, Python",
@@ -375,6 +427,11 @@ VARIANTS = {
         ),
         "skill_order": ["programming", "data_eng", "ai_ml", "backend", "frontend", "cloud", "qa"],
         "creditlens_order": ["etl", "schema", "deploy", "watchlist", "rag"],
+        "project_order": ["stadtanalyse", "pipeline_guardian", "creditlens"],
+        "bullet_order": {"stadtanalyse": ["platform", "dbt", "quality", "ml", "serve"],
+                         "pipeline_guardian": ["gateway", "drift", "schema", "airflow", "synth"],
+                         "creditlens": ["etl", "schema", "deploy", "watchlist", "rag"]},
+        "pg_order": ["gateway", "drift", "airflow", "schema", "synth"],
         "keywords": SKILLS["data_eng"]["keywords"] + ["python", "sql"],
     },
     "ai_ml": {
@@ -396,6 +453,10 @@ VARIANTS = {
         ),
         "skill_order": ["programming", "ai_ml", "data_eng", "backend", "frontend", "cloud", "qa"],
         "creditlens_order": ["etl", "schema", "watchlist", "rag", "deploy"],
+        "project_order": ["creditlens", "stadtanalyse", "pipeline_guardian"],
+        "bullet_order": {"creditlens": ["rag", "etl", "schema", "watchlist", "deploy"],
+                         "stadtanalyse": ["ml", "platform", "dbt", "quality", "serve"],
+                         "pipeline_guardian": ["drift", "gateway", "schema", "airflow", "synth"]},
         "keywords": SKILLS["ai_ml"]["keywords"],
     },
     "software_eng": {
@@ -417,6 +478,10 @@ VARIANTS = {
         ),
         "skill_order": ["programming", "backend", "frontend", "cloud", "data_eng", "ai_ml", "qa"],
         "creditlens_order": ["deploy", "etl", "schema", "watchlist", "rag"],
+        "project_order": ["stadtanalyse", "creditlens", "pipeline_guardian"],
+        "bullet_order": {"stadtanalyse": ["serve", "platform", "ml", "dbt", "quality"],
+                         "creditlens": ["deploy", "etl", "schema", "watchlist", "rag"],
+                         "pipeline_guardian": ["airflow", "gateway", "drift", "schema", "synth"]},
         "keywords": (SKILLS["backend"]["keywords"] + SKILLS["frontend"]["keywords"]
                      + ["python", "sql", "git", "docker", "ci/cd", "rest api",
                         "software", "softwareentwicklung", "developer", "entwickler"]),
@@ -440,6 +505,11 @@ VARIANTS = {
         ),
         "skill_order": ["programming", "ai_ml", "data_eng", "backend", "frontend", "cloud", "qa"],
         "creditlens_order": ["rag", "etl", "watchlist", "schema", "deploy"],
+        "project_order": ["creditlens", "stadtanalyse", "pipeline_guardian"],
+        "bullet_order": {"creditlens": ["rag", "etl", "watchlist", "schema", "deploy"],
+                         "stadtanalyse": ["platform", "ml", "dbt", "quality", "serve"],
+                         "pipeline_guardian": ["gateway", "drift", "schema", "airflow", "synth"]},
+        "pg_order": ["gateway", "drift", "airflow", "schema", "synth"],
         "keywords": ["nlp", "chatbot", "spacy"] + SKILLS["ai_ml"]["keywords"],
     },
 }
@@ -449,11 +519,18 @@ VARIANTS = {
 # five strong bullets in the bank; only the top N (per variant order, then JD
 # relevance) are printed. Raise this only if the PDF still fits on one page --
 # build.py prints the page count after conversion.
-MAX_CREDITLENS_BULLETS = 3
+# Bullets printed per project. Three projects x 3 bullets is a full page on
+# its own -- the fitter steps this to 2 before it shrinks the body font.
+PROJECT_BULLET_CAP = 3
+
+MAX_CREDITLENS_BULLETS = PROJECT_BULLET_CAP   # back-compat
+MAX_PG_BULLETS = PROJECT_BULLET_CAP
 
 # Side projects printed after CreditLens. Trim this list first if the PDF
 # spills to 2 pages.
-SIDE_PROJECTS = ["skillsync", "covercraft"]
+SIDE_PROJECTS = []   # Retired from the CV: SkillSync and CoverCraft. The three
+                     # projects above are stronger and none of them is a job-search
+                     # tool. Both remain in PROJECTS if you ever want them back.
 
 
 KNOWN_GAPS = ["kubernetes", "airflow", "dbt", "spark streaming",
