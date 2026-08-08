@@ -1,119 +1,165 @@
 """
-Scores a job description against the master resume's real skills.
+Fit scoring (remediation brief R4).
 
-IMPORTANT HONESTY NOTE:
-There is no universal "ATS score" -- every ATS (Workday, SuccessFactors,
-Greenhouse, etc.) scores differently and none expose their real algorithm.
-This module computes a transparent, explainable keyword-overlap percentage
-instead. Treat it as a directional signal, not a guarantee of any real
-system's score.
+Scores each surviving posting on:
+  - required-technology overlap with the fact bank (the candidate must claim
+    the technology in the bank to get the point; technologies the candidate
+    has but is migrating away from -- e.g. Streamlit -- do not count)
+  - domain proximity between the employer's business and the candidate's most
+    relevant project
+  - seniority fit (internship vs the candidate's profile)
 
-BUG FIX (the big one): this module used naive substring matching
-(`if kw in jd_lower`), which produced silent false positives:
-    "git"  matched inside "digital"
-    "rag"  matched inside "Leveraging" / "storage" / "average"
-    "iam"  matched inside "Miami"
-    "sql"  matched inside "postgresql"
-Those phantom matches then (a) inflated overlap_pct, (b) reordered resume
-skill categories so Cloud & Infra outranked AI/ML on AI roles, and (c) got
-printed verbatim into cover letters. relevance_filter.py already had the
-word-boundary fix; it now lives in one place and both modules use it.
+The result is a transparent 0-100 fit score plus human-readable reasoning.
+main.py refuses to generate documents below config.MIN_FIT_SCORE.
+
+This replaces the old `overlap_pct` keyword-overlap heuristic, which rewarded
+generic words ("python", "sql") and never distinguished a real fit from a
+bad one -- the reason 10-25 low-value applications were generated per day.
 """
 
-import re
-from collections import OrderedDict
+import sys
+import os
 
-from config import SKILLS, VARIANTS, KNOWN_GAPS, KEYWORD_DISPLAY, NEVER_HIGHLIGHT
-from pipeline.relevance_filter import _word_match
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from config import CANDIDATE_PROFILE, MIN_FIT_SCORE
+from fact_bank import (
+    has_technology, fact_bank_technologies, PROJECT_ACHIEVEMENTS,
+    FAMILY_TO_PROJECT,
+)
+from pipeline.jd_parser import parse_posting
+
+# Technologies the candidate used but should not be credited for (the CV's
+# only mention of Streamlit is migrating away from it).
+WEAK_TECHNOLOGIES = {"Streamlit"}
+
+DOMAIN_WEIGHTS = {
+    "finance": {"creditlens": 1.0, "skillsync": 0.3, "covercraft": 0.2,
+                "stadtanalyse": 0.1, "pipeline_guardian": 0.4},
+    "logistics": {"stadtanalyse": 1.0, "pipeline_guardian": 0.5,
+                  "creditlens": 0.2, "skillsync": 0.1, "covercraft": 0.1},
+    "consumer": {"covercraft": 1.0, "skillsync": 0.9, "creditlens": 0.5,
+                 "stadtanalyse": 0.3, "pipeline_guardian": 0.3},
+    "productivity": {"skillsync": 1.0, "covercraft": 0.9, "creditlens": 0.4,
+                     "stadtanalyse": 0.3, "pipeline_guardian": 0.4},
+    "platform": {"pipeline_guardian": 1.0, "stadtanalyse": 0.8,
+                 "creditlens": 0.4, "skillsync": 0.3, "covercraft": 0.2},
+}
+
+TECH_WEIGHT = 0.55
+DOMAIN_WEIGHT = 0.35
+SENIORITY_WEIGHT = 0.10
+
+# Every technology in the fact bank the candidate can actually be credited
+# for (used to check whether a JD-required technology is a claimed skill).
+_CLAIMED = fact_bank_technologies() - WEAK_TECHNOLOGIES
 
 
-def _count_occurrences(keyword: str, text: str) -> int:
-    return len(re.findall(r"\b" + re.escape(keyword) + r"\b", text, re.IGNORECASE))
+def technology_overlap(parsed):
+    """Fraction of JD-required technologies that are claimed in the fact bank.
 
-
-def _display(keyword: str) -> str:
-    return KEYWORD_DISPLAY.get(keyword, keyword.title())
-
-
-def _rank_highlights(matched, jd_text, job_title):
-    """Order matched keywords by how central they are to THIS posting, then
-    map to display names and drop duplicates + non-signalling terms.
-
-    Replaces the old `sorted(matched)[:6]`, which was alphabetical -- that is
-    why letters opened with "aws, english, german, git".
+    A required tech that is not in the bank is a gap; the caller logs it.
+    Returns (overlap_frac, matched, missing).
     """
-    scored = []
-    for kw in matched:
-        if kw in NEVER_HIGHLIGHT:
-            continue
-        score = _count_occurrences(kw, jd_text) + (5 * _count_occurrences(kw, job_title))
-        scored.append((score, kw))
+    required = parsed.get("required_technologies") or []
+    if not required:
+        # Fall back to anything the JD mentions that the bank knows.
+        required = parsed.get("technologies_mentioned") or []
+    if not required:
+        return 1.0, [], []
 
-    scored.sort(key=lambda pair: (-pair[0], pair[1]))
+    matched = []
+    missing = []
+    for tech in required:
+        if tech in WEAK_TECHNOLOGIES:
+            continue                       # used but not a selling point
+        if has_technology(tech):
+            matched.append(tech)
+        else:
+            missing.append(tech)
+    return (len(matched) / max(len(required), 1)), matched, missing
 
-    # Dedupe on the DISPLAY name so postgres/postgresql don't both appear.
-    seen = OrderedDict()
-    for _, kw in scored:
-        seen.setdefault(_display(kw), None)
-    return list(seen.keys())
+
+def domain_proximity(parsed):
+    """Best project-domain match for the employer's business."""
+    domain = parsed.get("domain") or "general"
+    weights = DOMAIN_WEIGHTS.get(domain, {})
+    if not weights:
+        weights = {FAMILY_TO_PROJECT.get(domain, "creditlens"): 0.8,
+                   "creditlens": 0.5}
+    best = max(weights.items(), key=lambda kv: kv[1])
+    return best[0], best[1]
 
 
-def score_posting(jd_text: str, job_title: str = ""):
-    """
-    Returns:
-      {
-        "overlap_pct": float,      # % of resume keywords genuinely in the JD
-        "matched": [...],          # raw keywords, for resume reordering
-        "highlights": [...],       # display-ready, relevance-ranked, for the letter
-        "gaps": [...],             # KNOWN_GAPS the JD asks for that you lack
-        "best_variant": "data_engineer" | "ai_ml" | "nlp",
-        "variant_scores": {...}
-      }
-    """
-    jd_text = jd_text or ""
-    job_title = job_title or ""
-    title_lower = job_title.lower()
+def seniority_fit(parsed):
+    """Internship-level roles are a structural fit for a student candidate."""
+    text = f"{parsed['title'] or ''} {parsed.get('_jd') or ''}".lower()
+    internship = any(t in text for t in
+                     ["intern", "internship", "praktikum", "praktikant",
+                      "werkstudent", "working student", "pflichtpraktikum"])
+    return 1.0 if internship else 0.7
 
-    all_resume_keywords = set()
-    for cat in SKILLS.values():
-        all_resume_keywords.update(cat["keywords"])
 
-    # Word-boundary matching -- the fix.
-    matched = sorted({kw for kw in all_resume_keywords if _word_match(kw, jd_text)})
-    overlap_pct = round(100 * len(matched) / max(len(all_resume_keywords), 1), 1)
+def score_posting(posting, parsed=None):
+    """Return a dict with fit_score, reasoning, matched, gaps, and the
+    technology gaps to log. `parsed` may be supplied to avoid re-parsing."""
+    parsed = parsed or parse_posting(posting)
+    parsed["_jd"] = posting.get("jd_text", "")
 
-    gaps = sorted({kw for kw in KNOWN_GAPS if _word_match(kw, jd_text)})
+    overlap, matched, missing_tech = technology_overlap(parsed)
+    lead_project, dom_score = domain_proximity(parsed)
+    seniority = seniority_fit(parsed)
 
-    variant_scores = {}
-    for vname, vconf in VARIANTS.items():
-        body_hits = sum(1 for kw in vconf["keywords"] if _word_match(kw, jd_text))
-        title_hits = sum(3 for kw in vconf["keywords"] if _word_match(kw, job_title))
-        variant_scores[vname] = body_hits + title_hits
+    fit_score = round(
+        100 * (TECH_WEIGHT * overlap + DOMAIN_WEIGHT * dom_score
+               + SENIORITY_WEIGHT * seniority), 1)
 
-    # Direct title-phrase overrides beat keyword scoring entirely.
-    swe_title = any(t in title_lower for t in [
-        "software", "softwareentwicklung", "developer", "entwickler", "backend",
-        "frontend", "full stack", "fullstack", "full-stack", "web develop"])
-    if swe_title and not any(t in title_lower for t in ["data", "ml ", "machine learning", "ai "]):
-        best_variant = "software_eng"
-    elif "data engineer" in title_lower or "data engineering" in title_lower:
-        best_variant = "data_engineer"
-    elif _word_match("nlp", job_title):
-        best_variant = "nlp"
-    elif any(t in title_lower for t in ["ai engineer", "ml engineer", "machine learning",
-                                        "genai", "llm engineer", "ai scientist",
-                                        "data scientist"]):
-        best_variant = "ai_ml"
+    reasons = []
+    required_list = parsed.get("required_technologies")
+    if required_list:
+        reasons.append(f"required-tech overlap {len(matched)}/{len(required_list)}")
     else:
-        best_variant = max(variant_scores, key=variant_scores.get)
-        if variant_scores[best_variant] == 0:
-            best_variant = "ai_ml"
+        reasons.append("no explicit required tech list in the JD")
+    if missing_tech:
+        reasons.append(f"lacks: {', '.join(missing_tech)}")
+    reasons.append(f"domain proximity to '{lead_project}' ({dom_score:.2f})")
+    reasons.append(f"seniority fit {'internship' if seniority == 1.0 else 'general'}")
+    if fit_score < MIN_FIT_SCORE:
+        reasons.append(f"below configured floor of {MIN_FIT_SCORE}")
 
+    profile = _profile_for(parsed)
     return {
-        "overlap_pct": overlap_pct,
+        "fit_score": fit_score,
+        "below_floor": fit_score < MIN_FIT_SCORE,
+        "min_fit_score": MIN_FIT_SCORE,
+        "reasoning": "; ".join(reasons),
         "matched": matched,
-        "highlights": _rank_highlights(matched, jd_text, job_title),
-        "gaps": gaps,
-        "best_variant": best_variant,
-        "variant_scores": variant_scores,
+        "technology_gaps": parsed.get("technology_gaps") or [],
+        "lead_project": lead_project,
+        "profile": profile,
     }
+
+
+def _profile_for(parsed):
+    """Pick the CV summary framing: data engineering vs AI/ML, from the JD."""
+    text = f"{parsed['title'] or ''} {parsed.get('_jd') or ''}".lower()
+    de_hits = sum(1 for t in ["data engineer", "data engineering", "etl",
+                              "data pipeline", "warehouse", "daten"] if t in text)
+    ai_hits = sum(1 for t in ["machine learning", "ml ", " ai", "llm", "nlp",
+                              "genai", "deep learning", "rag"] if t in text)
+    return "data_engineer" if de_hits >= ai_hits else "ai_ml"
+
+
+if __name__ == "__main__":
+    posting = {
+        "company": "PIMCO Prime Real Estate",
+        "title": "Intern in Software and Data Engineering (m/f/d)",
+        "location": "Munich, Germany",
+        "apply_url": "https://www.linkedin.com/jobs/view/123",
+        "jd_text": ("Requirements: Python, RAG/LLM solutions using vector "
+                    "databases, Spark. Portfolio and credit analytics. "
+                    "Internship for 6 months."),
+    }
+    result = score_posting(posting)
+    for k, v in result.items():
+        print(f"{k}: {v}")

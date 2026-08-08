@@ -21,8 +21,10 @@ from openpyxl.styles import Font
 COLUMNS = [
     "posting_hash", "source", "company", "title", "location",
     "date_posted", "date_collected", "jd_text", "apply_url",
-    "overlap_pct", "best_variant", "gaps", "status",
-    "applied_date", "follow_up_date", "outcome", "resume_file",
+    "fit_score", "profile", "gate_status", "gate_reasons",
+    "channel", "channel_kind", "gaps", "date_sent",
+    "status", "applied_date", "follow_up_date",
+    "response_date", "days_to_response", "outcome", "resume_file",
 ]
 
 APPLY_URL_COL_INDEX = COLUMNS.index("apply_url") + 1
@@ -135,12 +137,19 @@ def append_postings(xlsx_path, postings):
             "date_collected": today,
             "jd_text": p.get("jd_text", ""),
             "apply_url": clean_url if clean_url else "N/A - broken or missing link, check source manually",
-            "overlap_pct": p.get("overlap_pct", ""),
-            "best_variant": p.get("best_variant", ""),
+            "fit_score": p.get("fit_score", ""),
+            "profile": p.get("profile", ""),
+            "gate_status": p.get("gate_status", ""),
+            "gate_reasons": p.get("gate_reasons", ""),
+            "channel": p.get("submission_channel", ""),
+            "channel_kind": p.get("submission_channel_kind", ""),
             "gaps": p.get("gaps", ""),
+            "date_sent": p.get("date_sent", ""),
             "status": p.get("status", "not_applied"),
             "applied_date": p.get("applied_date", ""),
             "follow_up_date": p.get("follow_up_date", ""),
+            "response_date": p.get("response_date", ""),
+            "days_to_response": p.get("days_to_response", ""),
             "outcome": p.get("outcome", ""),
             "resume_file": p.get("resume_file", ""),
         }

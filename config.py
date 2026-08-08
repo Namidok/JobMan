@@ -83,6 +83,62 @@ AVAILABILITY = "available immediately for 5\u20136 months (per programme require
 
 
 # ---------------------------------------------------------------------------
+# CANDIDATE PROFILE -- the configuration the gate, scorer, CV and cover letter
+# all read from. Nothing here is hardcoded elsewhere; edit these values (and
+# VERIFY them) rather than touching the pipeline.
+#
+# availability: the window of start dates the candidate can actually honour.
+#   The gate rejects any posting whose start date falls outside it, and the CV
+#   summary names the window that matches each posting's start date.
+# relocation_cities: normalized city keys the candidate will work in. "remote"
+#   always passes. A city absent here is rejected by the gate with a reason.
+#   German umlauts are stripped (munich == muenchen == munchen).
+# german level: candidate's current level AND the highest required level a JD
+#   may demand. A JD requiring German above max_german_level is rejected.
+# ---------------------------------------------------------------------------
+CANDIDATE_PROFILE = {
+    "name": "Srikar Kodi",
+    "base_city": "Berlin",
+    "german_level": "A2",
+    "max_german_level": "B1",
+    "english_level": "C1",
+    "availability_start": "2026-08-01",
+    "availability_end": "2026-12-31",
+    "duration_months": [5, 6],
+    "availability_text": "available from August 2026 for 5\u20136 months (per programme requirement)",
+    "relocation_cities": [
+        "berlin", "potsdam", "munich", "muenchen", "munchen",
+        "frankfurt", "hamburg", "cologne", "koeln", "koln",
+        "stuttgart", "duesseldorf", "dusseldorf", "remote",
+    ],
+}
+
+# Postings older than this many days are near-worthless (competition volume).
+MAX_POSTING_AGE_DAYS = 14
+
+# Hard floor for fit score. Below this, no documents are generated; the
+# posting is logged with its score and reasoning for review.
+MIN_FIT_SCORE = 60.0
+
+# R8 output hygiene.
+CV_FILENAME = "Kodi_Srikar_CV"
+COVER_LETTER_FILENAME = "Kodi_Srikar_Anschreiben"
+PDF_AUTHOR = "Srikar Kodi"
+
+# R6 -- full sender postal address block (German convention) required at the
+# top of every letter. The street/postal code are personal data only you can
+# supply; the letter builder refuses to emit a letter while a FILL: marker
+# survives, so configure these before running the pipeline.
+SENDER_ADDRESS = {
+    "name": "Srikar Kodi",
+    "street": "FILL:street address",
+    "postal_code": "FILL:postal code",
+    "city": "Berlin",
+    "country": "Germany",
+}
+
+
+# ---------------------------------------------------------------------------
 # SPOKEN LANGUAGES -- deliberately NOT in SKILLS.
 #
 # When they lived in SKILLS, build.py's JD-relevance sort could promote
@@ -555,6 +611,15 @@ BLOCKER_PATTERNS = [
     r"\bPhD\s+(?:required|candidate)",
     r"minimum\s+of\s+[5-9]\+?\s+years",
 ]
+
+
+def sender_address_configured(sender_address=None):
+    """True when the letter's sender address block has no FILL: markers."""
+    addr = sender_address or SENDER_ADDRESS
+    if not addr or not isinstance(addr, dict):
+        return False
+    text = " ".join(str(v) for v in addr.values())
+    return FILL not in text and bool(addr.get("street", "").strip())
 
 
 def validate(strict=True):

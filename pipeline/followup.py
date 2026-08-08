@@ -109,11 +109,15 @@ def load_rows(xlsx_path):
                 "company": get("company"),
                 "title": get("title"),
                 "apply_url": get("apply_url"),
-                "overlap_pct": get("overlap_pct"),
-                "best_variant": get("best_variant"),
+                "fit_score": get("fit_score") if get("fit_score") is not None else get("overlap_pct"),
+                "profile": get("profile") if get("profile") is not None else get("best_variant"),
+                "channel": get("channel"),
+                "gate_reasons": get("gate_reasons"),
                 "status": get("status"),
                 "applied_date": get("applied_date"),
                 "follow_up_date": get("follow_up_date"),
+                "response_date": get("response_date"),
+                "days_to_response": get("days_to_response"),
                 "outcome": get("outcome"),
             })
     return rows
@@ -155,6 +159,15 @@ def mark_outcome(xlsx_path, sheet, row, outcome):
     fu_idx = _ensure_column(ws, col, "follow_up_date")
     ws.cell(row=int(row), column=fu_idx).value = None
 
+    # R10: response_date + days_to_response (from applied_date, when present).
+    response_idx = _ensure_column(ws, col, "response_date")
+    ws.cell(row=int(row), column=response_idx).value = date.today().isoformat()
+
+    applied = _to_date(ws.cell(row=int(row), column=_ensure_column(ws, col, "applied_date")).value)
+    if applied:
+        days = (date.today() - applied).days
+        ws.cell(row=int(row), column=_ensure_column(ws, col, "days_to_response")).value = days
+
     wb.save(xlsx_path)
     print(f"Recorded outcome '{outcome}' for '{sheet}' row {row} (follow-up cleared).")
 
@@ -180,7 +193,7 @@ def build_report(rows):
 
 
 def build_followup_email(row):
-    variant = row["best_variant"] or "ai_ml"
+    variant = row.get("profile") or row.get("best_variant") or "ai_ml"
     if variant not in HIGHLIGHTS:
         variant = "ai_ml"
     return FOLLOWUP_TEMPLATE.format(
@@ -199,8 +212,8 @@ def _line(row):
 
 
 def _pct_key(row):
-    """Numeric sort key for overlap_pct, tolerant of None/'' /'12.1%'."""
-    raw = row.get("overlap_pct")
+    """Numeric sort key for fit_score (old rows fall back to overlap_pct)."""
+    raw = row.get("fit_score")
     if raw is None or raw == "":
         return 0.0
     try:
@@ -232,11 +245,11 @@ def render_report(xlsx_path):
         print(_line(r))
 
     print(f"\n== {len(report['not_applied'])} never applied ==")
-    # BUG FIX: this sorted overlap_pct as a STRING, so "9.5" ranked above
-    # "85.0" and your best unapplied match sank below a 9% one.
+    # BUG FIX: this sorted fit as a STRING, so "9.5" ranked above "85.0" and
+    # the best unapplied match sank below a 9% one.
     for r in sorted(report["not_applied"], key=_pct_key, reverse=True):
-        pct = r["overlap_pct"] if r["overlap_pct"] is not None else ""
-        print(f"- {r['company']} | {r['title']} ({pct}% match)  "
+        fit = r["fit_score"] if r["fit_score"] is not None else ""
+        print(f"- {r['company']} | {r['title']} (fit {fit})  "
               f"[{r['sheet']} row {r['row']}]  {r['apply_url'] or ''}")
 
     print(f"\n== {len(report['decided'])} decided ==")
