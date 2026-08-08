@@ -276,29 +276,32 @@ def t5(build_dir):
 # ---------------------------------------------------------------------------
 # T6
 # ---------------------------------------------------------------------------
+# Gate correctness under the rebalanced policy: only within-batch duplicates
+# block; every quality concern (language, start window, relocation, role
+# type, Easy Apply) is a WARNING that still lets the package build.
 def t6():
     results = []
 
     bad_german = {"company": "A", "title": "Data Engineer Intern",
                   "location": "Berlin", "date_posted": "2026-08-06",
                   "jd_text": "German C1 required. Start 01.10.2026. Python ETL. careers.a.de"}
-    ok, reasons = evaluate(bad_german)
-    results.append(check("T6 German C1 required -> blocked",
-                         not ok and any("German c1" in r for r in reasons), str(reasons)))
+    ok, warnings = evaluate(bad_german)
+    results.append(check("T6 German C1 required -> warning, not blocked",
+                         ok and any("German c1" in w for w in warnings), str(warnings)))
 
     bad_start = {"company": "B", "title": "Data Engineering Intern",
                  "location": "Berlin", "date_posted": "2026-08-06",
                  "jd_text": "Start 01.03.2026. Python, ETL. Apply via careers.b.de"}
-    ok, reasons = evaluate(bad_start)
-    results.append(check("T6 start before availability -> blocked",
-                         not ok and any("before availability" in r for r in reasons), str(reasons)))
+    ok, warnings = evaluate(bad_start)
+    results.append(check("T6 start before availability -> warning, not blocked",
+                         ok and any("before availability" in w for w in warnings), str(warnings)))
 
     bad_city = {"company": "C", "title": "Data Engineering Intern",
                 "location": "Dresden", "date_posted": "2026-08-06",
                 "jd_text": "Start 01.10.2026. Python, ETL. Apply via careers.c.de"}
-    ok, reasons = evaluate(bad_city)
-    results.append(check("T6 city outside relocation list -> blocked",
-                         not ok and any("not in relocation" in r for r in reasons), str(reasons)))
+    ok, warnings = evaluate(bad_city)
+    results.append(check("T6 city outside relocation list -> warning, not blocked",
+                         ok and any("not in relocation" in w for w in warnings), str(warnings)))
 
     seen = set()
     dup = {"company": "Allianz", "title": "Data Engineer Intern (m/f/d)",
@@ -310,39 +313,45 @@ def t6():
             "jd_text": "Start 01.10.2026. Python, ETL. Apply via allianz.com"}
     ok2, reasons2 = evaluate(dup2, seen_keys=seen)
     results.append(check("T6 duplicate requisition across subsidiaries -> blocked",
-                         ok1 and not ok2 and any("duplicate" in r for r in reasons2), str(reasons2)))
+                         ok1 and not ok2 and any("duplicate" in w for w in reasons2), str(reasons2)))
 
     ml_research = {"company": "D", "title": "ML Research Intern",
                    "location": "Berlin", "date_posted": "2026-08-06",
                    "jd_text": "Research on model interpretability. Python, PyTorch. careers.d.de"}
-    ok, reasons = evaluate(ml_research)
-    results.append(check("T6 ML Research role -> blocked",
-                         not ok and any("ML Research" in r for r in reasons), str(reasons)))
+    ok, warnings = evaluate(ml_research)
+    results.append(check("T6 ML Research role -> warning, not blocked",
+                         ok and any("ML Research" in w for w in warnings), str(warnings)))
 
     easy_apply = {"company": "F", "title": "Data Engineering Intern",
                   "location": "Berlin", "date_posted": "2026-08-06",
                   "jd_text": "Start 01.10.2026. Python, ETL. Easy Apply"}
-    ok, reasons = evaluate(easy_apply)
-    results.append(check("T6 Easy-Apply-only channel -> blocked (R9 enforcement)",
-                         not ok and any("Easy Apply channel refused" in r for r in reasons),
-                         str(reasons)))
+    ok, warnings = evaluate(easy_apply)
+    results.append(check("T6 Easy-Apply-only channel -> warning, package still builds",
+                         ok and any("Easy Apply" in w for w in warnings), str(warnings)))
 
     portal_wins = {"company": "G", "title": "Data Engineering Intern",
                    "location": "Berlin", "date_posted": "2026-08-06",
                    "jd_text": "Start 01.10.2026. Python, ETL. "
                               "Apply via careers.g.de. Easy Apply also available."}
-    ok, reasons = evaluate(portal_wins)
+    ok, warnings = evaluate(portal_wins)
     results.append(check("T6 JD-named portal beats Easy Apply markers",
-                         ok and not any("Easy Apply channel refused" in r for r in reasons),
-                         str(reasons)))
+                         ok and not any("Easy Apply" in w for w in warnings), str(warnings)))
 
     viable = {"company": "E", "title": "Data Engineering Internship",
               "location": "Munich", "date_posted": "2026-08-06",
               "jd_text": "Data Engineering internship, Python, Kafka, ETL. Start 01.10.2026. "
                          "Apply via careers.e.de"}
-    ok, reasons = evaluate(viable)
-    results.append(check("T6 viable data-eng posting passes", ok,
-                         str(reasons) if reasons else ""))
+    ok, warnings = evaluate(viable)
+    results.append(check("T6 viable data-eng posting passes with no warnings", ok and not warnings,
+                         str(warnings) if warnings else ""))
+
+    # German KI/ML titles now count as AI roles (rebalance): package builds,
+    # concern (if any) is only logged.
+    ki = {"company": "H", "title": "Werkstudent KI-Beratung (m/w/d)",
+          "location": "Berlin", "date_posted": "2026-08-06",
+          "jd_text": "Start 01.10.2026. Python, ETL. Apply via careers.h.de"}
+    ok, warnings = evaluate(ki)
+    results.append(check("T6 German 'KI' internship builds (not hard-blocked)", ok, str(warnings)))
 
     return all(results)
 

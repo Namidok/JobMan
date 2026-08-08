@@ -7,8 +7,10 @@ Compared with the old version (which led with a resume summary fragment,
 never addressed relocation, and left the start-date conflict unresolved):
 
   * Full sender postal address block (German convention) at the top, with a
-    named recipient block when the JD names a contact. The builder refuses to
-    emit a letter while SENDER_ADDRESS still contains FILL: markers.
+    named recipient block when the JD names a contact. When SENDER_ADDRESS
+    still contains FILL: markers the missing lines are emitted as visible
+    placeholders (so you can review the letter) plus a NOTE line to fill them
+    in before sending.
   * German date line and a bold Betreff line.
   * Opening paragraph names the target role, the Pflichtpraktikum ask, the
     availability window MATCHED to the posting's start date, the 5-6 month
@@ -35,6 +37,15 @@ from config import CONTACT, WORK_AUTH_LETTER, SENDER_ADDRESS, CANDIDATE_PROFILE,
 from fact_bank import TECH_CLAIM_SENTENCES, PROJECT_ACHIEVEMENTS
 
 GREY = RGBColor(0x55, 0x55, 0x55)
+
+
+def _addr_line(value):
+    """A missing sender-address line becomes a visible placeholder instead of
+    breaking the letter."""
+    v = (value or "").strip()
+    if not v or v.startswith("FILL:"):
+        return "[your address]"
+    return v
 
 # German date header ("8. August 2026") follows the German convention even
 # though the letter body is English.
@@ -199,21 +210,17 @@ def build_cover_letter(profile, parsed, score, output_path, sender_address=None)
     profile: 'data_engineer' | 'ai_ml'
     parsed:  parse_posting() result
     score:   score_posting() result (lead_project, matched)
-    sender_address: dict like config.SENDER_ADDRESS (defaults to config). The
-      builder refuses to emit while the address contains FILL: markers.
+    sender_address: dict like config.SENDER_ADDRESS (defaults to config). Any
+      missing FILL: lines are emitted as clearly-marked placeholders -- the
+      letter is still generated so you can review it, but you MUST replace the
+      placeholders before sending. Content facts (validate()) are never
+      fabricated.
     """
     sender = sender_address or SENDER_ADDRESS
     if not sender_address_configured(sender):
-        raise SystemExit(
-            "\n".join([
-                "",
-                "=" * 68,
-                "  SENDER_ADDRESS in config.py still contains FILL: markers.",
-                "  Set street and postal_code before generating cover letters.",
-                "=" * 68,
-                "",
-            ])
-        )
+        _emit_address_warning = True
+    else:
+        _emit_address_warning = False
     validate()
 
     company = parsed.get("company") or ""
@@ -242,11 +249,16 @@ def build_cover_letter(profile, parsed, score, output_path, sender_address=None)
     # Sender address block.
     sender_block = [
         f"{sender['name']}",
-        f"{sender['street']}",
-        f"{sender['postal_code']} {sender['city']}",
+        _addr_line(sender['street']),
+        f"{_addr_line(sender['postal_code'])} {sender['city']}",
         f"{sender['country']}",
     ]
     parts.append(("block", "\n".join(sender_block)))
+
+    if _emit_address_warning:
+        parts.append(("block",
+                      "[NOTE: fill in SENDER_ADDRESS street + postal_code in config.py "
+                      "before sending this letter.]"))
 
     # Recipient address block + date.
     recipient_block = "\n".join(recipient_lines)

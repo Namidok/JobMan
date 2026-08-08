@@ -152,13 +152,13 @@ def run(sources, min_fit=MIN_FIT_SCORE, check_links=True):
         p["parsed"] = parse_posting(p)
         p["_jd"] = p.get("jd_text", "")
 
-    # 3. Gate: disqualify with a logged reason; survivors carry `parsed`.
+    # 3. Gate: since the rebalance the gate hard-blocks only within-batch
+    # duplicates; every other concern (missing fields, channel, relocation,
+    # role quality) is logged as a warning in `gate_reasons` but does not stop
+    # the package from being built.
     allowed, blocked = gate.annotate(all_postings)
-    for b in blocked:
-        b["gate_status"] = "blocked"
-        b["gate_reasons"] = "; ".join(b["gate_reasons"])
     if blocked:
-        print(f"\n{len(blocked)} posting(s) blocked by the gate:")
+        print(f"\n{len(blocked)} duplicate posting(s) skipped (already tracked):")
         for b in blocked:
             print(f"  - {b['company']} | {b['title']}  ->  {b['gate_reasons']}")
 
@@ -191,10 +191,10 @@ def run(sources, min_fit=MIN_FIT_SCORE, check_links=True):
               f"{row['company']} - {row['title']}")
 
     today = date.today().isoformat()
-    letter_ready = sender_address_configured()
-    if not letter_ready:
-        print("\nWARNING: SENDER_ADDRESS still has FILL: markers -- cover letters will be "
-              "skipped. Set street + postal_code in config.py to enable them.")
+    if not sender_address_configured():
+        print("\nNOTE: SENDER_ADDRESS still has FILL: markers -- cover letters will be built "
+              "with visible '[your address]' placeholders + a NOTE line. Set street + "
+              "postal_code in config.py before sending any of them.")
 
     for row in qualified:
         parsed = row["parsed"]
@@ -224,15 +224,8 @@ def run(sources, min_fit=MIN_FIT_SCORE, check_links=True):
             except Exception as e:
                 print(f"  WARNING: link check failed for {row['company']}: {e}")
 
-        if letter_ready:
-            try:
-                build_cover_letter(sc["profile"], parsed, sc, cover_docx,
-                                   sender_address=SENDER_ADDRESS)
-            except SystemExit as e:
-                print(f"  (cover letter skipped: {e})")
-                cover_docx = None
-        else:
-            cover_docx = None
+        build_cover_letter(sc["profile"], parsed, sc, cover_docx,
+                           sender_address=SENDER_ADDRESS)
 
         try:
             resume_pdf = convert_to_pdf_clean(resume_docx, folder_path)
