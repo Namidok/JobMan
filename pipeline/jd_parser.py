@@ -242,7 +242,7 @@ def parse_start_date(jd_text, title=""):
 
     # Month-year patterns.
     for m in re.finditer(
-            r"\b(?:january|february|march|april|may|june|july|august|september|"
+            r"\b(january|february|march|april|may|june|july|august|september|"
             r"october|november|december|januar|februar|maerz|m\u00e4rz|april|mai|"
             r"juni|juli|august|september|oktober|november|dezember)"
             r"\s+(20\d{2}|'\d{2})", text, re.IGNORECASE):

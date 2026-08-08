@@ -76,6 +76,17 @@ WORK_AUTH_NEUTRAL = (
 WORK_AUTH = WORK_AUTH_CONFIRMED if VERIFY_WORK_AUTH else WORK_AUTH_NEUTRAL
 SHOW_WORK_AUTH_ON_RESUME = False
 
+# Plain-language work-auth sentence for the COVER LETTER (review feedback: drop
+# the statute number -- a wrong citation is worse than none, and it reads as
+# defensive). Lands the only point that matters: no extra admin burden. Keep it
+# in sync with whatever VERIFY_WORK_AUTH allows once confirmed.
+WORK_AUTH_LETTER = (
+    "As this internship is a mandatory component of my Master's programme "
+    "(Pflichtpraktikum), it is exempt from the 140-day annual work limit for "
+    "international students \u2014 so there is no additional administrative "
+    "burden on your side."
+)
+
 
 # It is now August 2026 -- "available from August 2026" reads as a future
 # date to a skimming recruiter. Say "immediately".
@@ -119,6 +130,39 @@ MAX_POSTING_AGE_DAYS = 14
 # Hard floor for fit score. Below this, no documents are generated; the
 # posting is logged with its score and reasoning for review.
 MIN_FIT_SCORE = 60.0
+
+# Channel enforcement (R9): refuse to route through LinkedIn Easy Apply. It
+# never reaches the employer's ATS, so a posting whose only channel is Easy
+# Apply is flagged for manual review instead of being packaged. Set False only
+# if you consciously accept Easy Apply for small employers that offer nothing
+# else.
+BLOCK_EASY_APPLY_ONLY = True
+
+# ---------------------------------------------------------------------------
+# TARGET COMPANIES (review feedback, item 1 -- sourcing)
+#
+# Direct career-page monitors for companies whose postings rarely reach
+# Arbeitnow (or arrive late). Each entry polls a public ATS API when one
+# exists (kind greenhouse/lever -- full JDs come back structured) and falls
+# back to an HTML scrape of `url` otherwise. Extend this list freely; the
+# collector caps detail volume and filters to internships + AI/Data/ML +
+# Germany + last 24h like every other source.
+# ---------------------------------------------------------------------------
+TARGET_COMPANIES = [
+    {"name": "Databricks", "kind": "greenhouse", "board": "databricks"},
+    {"name": "Trade Republic", "kind": "greenhouse", "board": "traderepublic"},
+    {"name": "Zalando", "kind": "html", "url": "https://jobs.zalando.com/en/jobs/?search=intern"},
+    {"name": "Delivery Hero", "kind": "html", "url": "https://careers.deliveryhero.com/search-jobs?keywords=intern"},
+    {"name": "HelloFresh", "kind": "html", "url": "https://careers.hellofresh.com/jobs?search=intern"},
+    {"name": "N26", "kind": "html", "url": "https://n26.com/en/careers/jobs?query=intern"},
+    {"name": "Celonis", "kind": "html", "url": "https://jobs.celonis.com/search/?createNewAlert=false&q=intern"},
+    {"name": "Personio", "kind": "html", "url": "https://jobs.personio.de/?search=intern"},
+    {"name": "SAP", "kind": "html", "url": "https://jobs.sap.com/search-jobs?keywords=intern"},
+    {"name": "Siemens", "kind": "html", "url": "https://jobs.siemens.com/careers?query=intern"},
+    {"name": "AWS Berlin", "kind": "html", "url": "https://www.amazon.jobs/en/search?base_query=intern&loc_query=Berlin"},
+    {"name": "Flix", "kind": "html", "url": "https://jobs.flix.com/search/?q=intern"},
+    {"name": "Wayfair", "kind": "html", "url": "https://careers.wayfair.com/"},
+]
 
 # R8 output hygiene.
 CV_FILENAME = "Kodi_Srikar_CV"

@@ -30,14 +30,19 @@ import re
 import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from config import CONTACT, WORK_AUTH, SENDER_ADDRESS, CANDIDATE_PROFILE, \
+from config import CONTACT, WORK_AUTH_LETTER, SENDER_ADDRESS, CANDIDATE_PROFILE, \
     sender_address_configured, validate
 from fact_bank import TECH_CLAIM_SENTENCES, PROJECT_ACHIEVEMENTS
 
 GREY = RGBColor(0x55, 0x55, 0x55)
 
+# German date header ("8. August 2026") follows the German convention even
+# though the letter body is English.
 GERMAN_MONTHS = ["Januar", "Februar", "M\u00e4rz", "April", "Mai", "Juni",
                  "Juli", "August", "September", "Oktober", "November", "Dezember"]
+
+ENGLISH_MONTHS = ["January", "February", "March", "April", "May", "June",
+                  "July", "August", "September", "October", "November", "December"]
 
 # One-sentence project highlights per profile. Kept for pipeline/followup.py,
 # which still uses HIGHLIGHTS to build the follow-up email body.
@@ -109,16 +114,16 @@ def clean_role_title(role: str, company: str = "") -> str:
     return re.sub(r"[\s,;\-\u2013\u2014|]+$", "", title).strip() or (role or "").strip()
 
 
-def _german_start(parsed):
-    """'I am available from Oktober 2026' from the parsed start date; falls
+def _availability_clause(parsed):
+    """'I am available from October 2026' from the parsed start date; falls
     back to 'I am available immediately' when the JD gave no date. The month
-    is spelled out (never '1.10.2026') so no numeric start-date token leaks
-    into the letter (T3: numbers must come from the fact bank)."""
+    is spelled out in English (the letter is English -- never a German/English
+    mix) so no numeric start-date token leaks into the letter (T3)."""
     start = parsed.get("start_date")
     if not start:
         return "I am available immediately"
     try:
-        m = GERMAN_MONTHS[int(start.month) - 1]
+        m = ENGLISH_MONTHS[int(start.month) - 1]
         return f"I am available from {m} {start.year}"
     except (AttributeError, IndexError, TypeError, ValueError):
         return "I am available immediately"
@@ -216,7 +221,7 @@ def build_cover_letter(profile, parsed, score, output_path, sender_address=None)
     recipient_lines, person = _recipient_lines(parsed)
     salutation = f"Dear {person}," if person else f"Dear Hiring Team at {company},"
 
-    start_clause = _german_start(parsed)
+    start_clause = _availability_clause(parsed)
     relocation = _relocation_line(parsed)
     base_city = CANDIDATE_PROFILE.get("base_city", "Berlin")
 
@@ -227,12 +232,7 @@ def build_cover_letter(profile, parsed, score, output_path, sender_address=None)
         f"months as my programme requires. {relocation}"
     ).rstrip()
 
-    work_auth = (
-        f"I hold a German student residence permit (\u00a716b AufenthG) and am "
-        f"eligible to complete a mandatory internship (Pflichtpraktikum) as a "
-        f"required part of my degree \u2014 it does not count against the student "
-        f"work-day limit."
-    )
+    work_auth = WORK_AUTH_LETTER
 
     project_para = _project_paragraph(parsed, score)
     tech_line = _jd_tech_sentence(parsed, score)

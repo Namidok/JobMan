@@ -602,6 +602,82 @@ FAMILY_TO_PROJECT = {
 }
 
 # ---------------------------------------------------------------------------
+# METRIC SOURCING (review feedback, item 5)
+#
+# Metric-stability guarantees every CV says "~72% query resolution" and "55%
+# defect reduction" consistently -- it does NOT verify the numbers. Before the
+# next run, go through this table and declare where each metric came from so
+# you can defend it in an interview. `kind` is one of:
+#   measured      -> from a real system/dashboard/report you can point at
+#   estimated     -> your own estimate (e.g. from release notes)
+#   approximation -> a rough figure, use with "~"
+#   unverified    -> cannot be sourced today -- rewrite this claim as scope
+#
+# `python3 fact_bank.py --audit` (or `python3 main.py --metric-audit`) lists
+# every metric with its kind and source, and flags anything still UNSET or
+# unverified. This is a paper-trail, not a build gate.
+# ---------------------------------------------------------------------------
+METRIC_SOURCES = {
+    # "~72%":  {"kind": "unverified", "source": ""},
+    # "~5":    {"kind": "unverified", "source": ""},
+    # "10":    {"kind": "unverified", "source": ""},
+    # "15":    {"kind": "unverified", "source": ""},
+    # "~90%":  {"kind": "unverified", "source": ""},
+    # "~30":   {"kind": "unverified", "source": ""},
+    # "3":     {"kind": "unverified", "source": ""},
+    # "40,000+": {"kind": "unverified", "source": ""},
+    # "3.8":   {"kind": "unverified", "source": ""},
+    # "1.6":   {"kind": "unverified", "source": ""},
+    # "18+":   {"kind": "unverified", "source": ""},
+    # "55%":   {"kind": "unverified", "source": ""},
+    # "12+":   {"kind": "unverified", "source": ""},
+    # "40+":   {"kind": "unverified", "source": ""},
+    # "5.5x":  {"kind": "unverified", "source": ""},
+    # "4":     {"kind": "unverified", "source": ""},
+    # "3.3":   {"kind": "unverified", "source": ""},
+    # "2":     {"kind": "unverified", "source": ""},
+    # "0.01":  {"kind": "unverified", "source": ""},
+    # "2.9":   {"kind": "unverified", "source": ""},
+    # "16":    {"kind": "unverified", "source": ""},
+}
+
+
+def metric_audit():
+    """Report every numeric metric in the bank against METRIC_SOURCES.
+
+    Returns a list of dicts:
+      {token, achievement, verified, kind, source, needs_action}
+    where needs_action is True when the token has no provenance entry yet or
+    its kind is 'unverified' (the review's rewrite-as-scope bucket).
+    """
+    out = []
+    for org in EXPERIENCE_ACHIEVEMENTS.values():
+        for key, ach in org["achievements"].items():
+            _collect_metric(org["org"], key, ach, out)
+    for proj in PROJECT_ACHIEVEMENTS.values():
+        for key, ach in proj["achievements"].items():
+            _collect_metric(proj["name"], key, ach, out)
+    return out
+
+
+def _collect_metric(where, key, ach, out):
+    for token in sorted(ach.get("numbers") or []):
+        entry = METRIC_SOURCES.get(token) or {}
+        kind = entry.get("kind") or "unverified"
+        source = (entry.get("source") or "").strip()
+        unset = not METRIC_SOURCES.get(token)
+        needs_action = unset or kind == "unverified" or not source
+        out.append({
+            "token": token,
+            "achievement": f"{where} / {key}",
+            "verified": bool(ach.get("verified", False)),
+            "kind": kind,
+            "source": source,
+            "needs_action": needs_action,
+        })
+
+
+# ---------------------------------------------------------------------------
 # DERIVED NUMBERS / TECHNOLOGIES (for T3/T4)
 # ---------------------------------------------------------------------------
 
@@ -644,11 +720,12 @@ def fact_bank_numbers():
     # digits, education and experience years, spoken-language level codes.
     # They are real data, not metrics, and identical across all JDs (T4 holds
     # because the set is constant).
-    from config import CONTACT, SPOKEN_LANGUAGES, EDUCATION, WORK_AUTH
+    from config import CONTACT, SPOKEN_LANGUAGES, EDUCATION, WORK_AUTH, WORK_AUTH_LETTER
     for v in CONTACT.values():
         numbers.update(extract_numbers(str(v)))
     numbers.update(extract_numbers(SPOKEN_LANGUAGES))
     numbers.update(extract_numbers(WORK_AUTH))
+    numbers.update(extract_numbers(WORK_AUTH_LETTER))
     for edu in EDUCATION:
         numbers.update(extract_numbers(edu.get("dates", "")))
     for org in EXPERIENCE_ACHIEVEMENTS.values():
@@ -796,6 +873,18 @@ def validate_bank():
 
 
 if __name__ == "__main__":
+    import sys as _sys
+    if "--audit" in _sys.argv:
+        print("Metric provenance audit (review feedback, item 5) -- "
+              "fix every needs_action row before your next run\n")
+        for m in metric_audit():
+            flag = "!!" if m["needs_action"] else "ok"
+            print(f"  [{flag}] {m['token']:<9} {m['achievement']:<45} "
+                  f"verified={m['verified']} kind={m['kind']} source={m['source'] or 'UNSET'}")
+        print(f"\n{sum(1 for m in metric_audit() if m['needs_action'])} metric(s) "
+              "still need a declared source. Set them in METRIC_SOURCES in "
+              "fact_bank.py, or rewrite the claim as scope.")
+        _sys.exit(0)
     probs = validate_bank()
     print(f"{len(probs)} fact-bank problem(s)")
     for p in probs:

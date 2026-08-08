@@ -9,6 +9,11 @@ never point at a broken page.
 The audit found the applied-to postings had project links that returned HTTP
 errors when the PDFs were generated. This runs BEFORE conversion, right after
 the documents are built, and removes any failing link from the final docx.
+
+A dead link is a signal, not just noise: when the failing link belongs to the
+project the scorer picked as the lead for this posting, the drop is announced
+with a loud banner (and `python main.py --link-check` exits non-zero) instead
+of a quiet one-line removal.
 """
 
 import os
@@ -24,6 +29,17 @@ from fact_bank import PROJECT_ACHIEVEMENTS
 
 CHECK_TIMEOUT = 10
 USER_AGENT = "Mozilla/5.0 (job-application-link-check)"
+
+
+def _banner(url: str, status: str, lead: bool = False):
+    kind = "DEAD LEAD-PROJECT LINK" if lead else "DEAD LINK"
+    bar = "!" * 68
+    print(
+        "\n" + bar +
+        f"\n!! {kind}: {url} -> {status}"
+        f"\n!! {'This project leads the resume/letter for this posting -- fix the server' if lead else 'Link will be dropped from generated docs'}"
+        "\n" + bar + "\n"
+    )
 
 
 def check_url(url: str) -> tuple:
@@ -63,6 +79,35 @@ def check_project_links() -> dict:
     return results
 
 
+def report_project_links(results: dict, lead_project=None) -> dict:
+    """Print a status line per link and a loud banner for dead ones. When
+    lead_project is given, a dead link in that project gets the strongest
+    warning (its server should be fixed, not its link suppressed). Returns
+    {url: (ok, status)} for every checked link."""
+    flat = {}
+    for key, links in results.items():
+        is_lead = (lead_project is not None and key == lead_project)
+        for label, (ok, status) in links.items():
+            flat[label] = (ok, status)
+            if ok:
+                print(f"[OK   ] {key}:{label} -> {status}")
+            else:
+                _banner(label, status, lead=is_lead)
+    return flat
+
+
+def check_urls_alive(urls) -> list:
+    """Convenience: run check_url() over a list, print a banner per dead one,
+    and return the dead urls. Used by main.py before PDF conversion."""
+    dead = []
+    for u in urls:
+        ok, status = check_url(u)
+        if not ok:
+            dead.append(u)
+            _banner(u, status, lead=True)
+    return dead
+
+
 def remove_dead_links(docx_path: str, dead_urls) -> int:
     """Remove hyperlinks whose URL is in dead_urls from a built docx.
     Returns how many links were removed."""
@@ -93,6 +138,6 @@ def remove_dead_links(docx_path: str, dead_urls) -> int:
 
 
 if __name__ == "__main__":
-    for proj_key, links in check_project_links().items():
-        for label, (ok, status) in links.items():
-            print(f"[{'OK ' if ok else 'DEAD'}] {proj_key}:{label} -> {status}")
+    _lead = sys.argv[1] if len(sys.argv) > 1 else None
+    report_project_links(check_project_links(), lead_project=_lead)
+    sys.exit(1 if any(not ok for ok, _ in sum(check_project_links().values(), [])) else 0)

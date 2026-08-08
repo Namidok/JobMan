@@ -22,8 +22,8 @@ executed against real modules and real generated documents.
       addressed, start date matched, Pflichtpraktikum + work-auth present.
   T6  Gate correctness: language/start/location/duplicate/role-type rejections
       fire with reasons; viable postings pass.
-  T7  Dead links: check_url() flags the known-dead creditlens URL; remove_dead_links()
-      drops it from a generated docx.
+  T7  Dead links: check_url() flags a deterministically-dead URL and passes a
+      live one; remove_dead_links() drops the target URL from a generated docx.
   T8  R8 output hygiene: all ten required skill literals present in the skills
       block; PDF /Author metadata == PDF_AUTHOR; no broken tokens
       (RetrievalAugmented / percolumn).
@@ -37,7 +37,7 @@ import re
 import sys
 import shutil
 import tempfile
-from datetime import date
+from datetime import date, timedelta
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, ROOT)
@@ -166,6 +166,17 @@ def t2():
               str(p["technology_gaps"])),
         check("T2 domain classified", p["domain"] == "finance", str(p["domain"])),
     ]
+
+    # Regression: a plain "from October 2026" phrasing used to crash
+    # parse_start_date (the month alternation was a non-capturing group, so
+    # m.group(2) did not exist). 'from <Month> <Year>' is very common in JDs.
+    plain = parse_posting({**PIMCO_POSTING, "jd_text": (
+        "Available from October 2026. Internship for 6 months. "
+        "Requirements: Python, SQL.")})
+    checks.append(check(
+        "T2 plain 'from October 2026' does not crash",
+        plain["start_date"] is not None and plain["start_date"].month == 10
+        and plain["start_date"].year == 2026, str(plain["start_date"])))
     return all(checks)
 
 
@@ -254,9 +265,9 @@ def t5(build_dir):
               "CreditLens" in text and "Stadtanalyse" not in body.split("Thank you")[0],
               ""),
         check("T5 relocation addressed", "relocate to Munich" in text, ""),
-        check("T5 start date matched", "Oktober 2026" in text, ""),
+        check("T5 start date matched", "October 2026" in text, ""),
         check("T5 Pflichtpraktikum + work auth present",
-              "Pflichtpraktikum" in text and "AufenthG" in text, ""),
+              "Pflichtpraktikum" in text and "140-day" in text, ""),
         check("T5 named recipient used", "Dear Anna Schmidt," in text, ""),
     ]
     return all(results)
@@ -308,6 +319,23 @@ def t6():
     results.append(check("T6 ML Research role -> blocked",
                          not ok and any("ML Research" in r for r in reasons), str(reasons)))
 
+    easy_apply = {"company": "F", "title": "Data Engineering Intern",
+                  "location": "Berlin", "date_posted": "2026-08-06",
+                  "jd_text": "Start 01.10.2026. Python, ETL. Easy Apply"}
+    ok, reasons = evaluate(easy_apply)
+    results.append(check("T6 Easy-Apply-only channel -> blocked (R9 enforcement)",
+                         not ok and any("Easy Apply channel refused" in r for r in reasons),
+                         str(reasons)))
+
+    portal_wins = {"company": "G", "title": "Data Engineering Intern",
+                   "location": "Berlin", "date_posted": "2026-08-06",
+                   "jd_text": "Start 01.10.2026. Python, ETL. "
+                              "Apply via careers.g.de. Easy Apply also available."}
+    ok, reasons = evaluate(portal_wins)
+    results.append(check("T6 JD-named portal beats Easy Apply markers",
+                         ok and not any("Easy Apply channel refused" in r for r in reasons),
+                         str(reasons)))
+
     viable = {"company": "E", "title": "Data Engineering Internship",
               "location": "Munich", "date_posted": "2026-08-06",
               "jd_text": "Data Engineering internship, Python, Kafka, ETL. Start 01.10.2026. "
@@ -323,7 +351,9 @@ def t6():
 # T7
 # ---------------------------------------------------------------------------
 def t7(build_dir):
-    dead_ok, dead_status = check_url("https://creditlens.srikarkodi.dev/")
+    # Use a deterministically-dead URL (.invalid always fails DNS) rather than a
+    # live server that may be up or down depending on the day.
+    dead_ok, dead_status = check_url("http://nonexistent.invalid/")
     live_ok, live_status = check_url("https://github.com/Namidok/CreditLens")
     r1 = check("T7 known-dead link flagged", not dead_ok, f"status={dead_status}")
     r2 = check("T7 known-live link passes", live_ok, f"status={live_status}")
@@ -420,13 +450,74 @@ def t9(build_dir):
     return r1 and r2 and r3 and r4 and r5 and r6 and r7 and r8
 
 
+# T10: new sourcing collectors (review feedback item 1). Offline-only -- canned
+# HTML through the parsers, plus config shape checks. Network behaviour is
+# exercised by the smoke runs, not by the acceptance suite.
+def t10(build_dir):
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    from collectors import _scrape, stepstone, absolventa, target_companies
+    from config import TARGET_COMPANIES
+
+    # StepStone card parser on canned HTML.
+    ss_html = (
+        '<article><a data-testid="job-item-title" '
+        'href="/stellenangebote--Werkstudent-Data-Berlin--1-inline.html">'
+        'Werkstudent Data (m/w/d)</a><span>Firma AG</span>'
+        '<time>vor 5 Stunden</time></article>'
+    )
+    items = stepstone._parse_listing(ss_html)
+    r1 = check("T10 StepStone card parsed", len(items) == 1, f"{len(items)}")
+    r2 = check("T10 StepStone fields parsed",
+               items and items[0]["title"] == "Werkstudent Data (m/w/d)"
+               and items[0]["href"].startswith("/stellenangebote")
+               and items[0]["date_posted"], str(items[0] if items else None))
+
+    # Absolventa card parser on canned HTML (incl. the -b- href variant).
+    ab_html = (
+        '<article><a href="/stellenangebote/999-p-test-intern-b-role"><h2>'
+        'Test Intern (m/w/d)</h2></a><span>Neu</span></article>'
+    )
+    items = absolventa._parse_listing(ab_html)
+    r3 = check("T10 Absolventa card parsed", len(items) == 1, f"{len(items)}")
+    r4 = check("T10 Absolventa fields parsed",
+               items and items[0]["title"] == "Test Intern (m/w/d)"
+               and items[0]["href"].startswith("/stellenangebote")
+               and items[0]["date_posted"] == date.today().isoformat(),
+               str(items[0] if items else None))
+
+    # Target-company config shape: every entry is monitorable.
+    bad = [t for t in TARGET_COMPANIES if not t.get("name")]
+    for t in TARGET_COMPANIES:
+        if t.get("kind") in ("greenhouse", "lever"):
+            if not t.get("board"):
+                bad.append(t)
+        else:
+            if not t.get("url"):
+                bad.append(t)
+    r5 = check("T10 TARGET_COMPANIES well-formed", not bad, f"{len(bad)} bad entries")
+    r6 = check("T10 target_companies exports fetch_postings",
+               callable(target_companies.fetch_postings), "")
+
+    # Shared helpers: German relative dates + script-stripping (the JD-cap fix).
+    r7 = check("T10 german_relative_to_iso handles 'vor 2 Tagen'",
+               _scrape.german_relative_to_iso("vor 2 Tagen") ==
+               (date.today() - timedelta(days=2)).isoformat(), "")
+    r8 = check("T10 strip_html drops script contents (JD flood fix)",
+               "javascript" not in _scrape.strip_html(
+                   "<p>Hello</p><script>javascript here</script>", max_len=200), "")
+    r9 = check("T10 strip_html capped at max_len",
+               len(_scrape.strip_html("<p>abcdefghij</p>", max_len=4)) <= 4, "")
+    return r1 and r2 and r3 and r4 and r5 and r6 and r7 and r8 and r9
+
+
 def main():
     build_dir = tempfile.mkdtemp(prefix="acceptance_", dir="/tmp")
     print(f"Build dir: {build_dir}\n")
     try:
         tests = [t1, t2, lambda: t3(build_dir), lambda: t4(build_dir),
                  lambda: t5(build_dir), t6, lambda: t7(build_dir),
-                 lambda: t8(build_dir), lambda: t9(build_dir)]
+                 lambda: t8(build_dir), lambda: t9(build_dir),
+                 lambda: t10(build_dir)]
         failed = 0
         for run in tests:
             try:

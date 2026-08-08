@@ -3,10 +3,22 @@ Main entry point. Run this yourself, on your own machine:
 
     python main.py --sources arbeitnow
     python main.py --sources arbeitnow linkedin indeed   (needs APIFY_API_TOKEN set)
+    python main.py --sources stepstone absolventa targets  (direct scraping/ATS boards)
+
+    Diagnostic flags (all offline except the collectors themselves):
+      python main.py --link-check       verify fact-bank project links (exit 1 on dead)
+      python main.py --gap-report       aggregate technology gaps across all log sheets
+      python main.py --dedupe-audit     summary of tracked postings + duplicate hash check
+      python main.py --import-history CSV   load an old tracker CSV into a sheet
+      python main.py --metric-audit     provenance for every metric token on the resume
 
 What it does, in order (remediation-brief pipeline):
   1. Collect postings from the sources you choose -- ALWAYS filtered to the
-     last 24 hours only, across every source.
+     last 24 hours only, across every source. Sources: arbeitnow (JSON API),
+     linkedin (Apify, needs token), indeed (pre-downloaded JSON),
+     stepstone + absolventa (German boards, direct scraping), targets
+     (target-company career pages via Greenhouse/Lever ATS APIs with an HTML
+     fallback).
   2. Parse each posting (pipeline/jd_parser.py): city, start date, duration,
      required languages, submission channel, required technologies, gaps.
   3. Run the disqualification gate (pipeline/gate.py): German above B1,
@@ -56,7 +68,8 @@ from pipeline.scorer import score_posting
 from resume_builder.build import build_resume_fitted
 from resume_builder.cover_letter import build_cover_letter
 from resume_builder.pdf_convert import convert_to_pdf_clean, count_pdf_pages
-from resume_builder.linkcheck import remove_dead_links, check_url
+from resume_builder.linkcheck import remove_dead_links, \
+    check_project_links, report_project_links
 
 XLSX_PATH = os.path.join(os.path.dirname(__file__), "data", "postings.xlsx")
 APPLICATIONS_DIR = os.path.join(os.path.dirname(__file__), "applications")
@@ -102,6 +115,30 @@ def _collect(sources):
             all_postings += kept
         except Exception as e:
             print(f"WARNING: Indeed loading failed, skipping this source: {e}")
+
+    if "stepstone" in sources:
+        print("Collecting from StepStone (last 24h only)...")
+        try:
+            from collectors import stepstone
+            all_postings += stepstone.fetch_postings()
+        except Exception as e:
+            print(f"WARNING: StepStone collection failed, skipping this source: {e}")
+
+    if "absolventa" in sources:
+        print("Collecting from Absolventa (last 24h only)...")
+        try:
+            from collectors import absolventa
+            all_postings += absolventa.fetch_postings()
+        except Exception as e:
+            print(f"WARNING: Absolventa collection failed, skipping this source: {e}")
+
+    if "targets" in sources:
+        print("Collecting from target-company career pages (last 24h only)...")
+        try:
+            from collectors import target_companies
+            all_postings += target_companies.fetch_postings()
+        except Exception as e:
+            print(f"WARNING: target-company collection failed, skipping this source: {e}")
 
     return all_postings
 
@@ -173,14 +210,17 @@ def run(sources, min_fit=MIN_FIT_SCORE, check_links=True):
         build_resume_fitted(sc["profile"], parsed, sc, resume_docx, jd_text=row.get("jd_text", ""))
 
         # R7: verify links before conversion and drop dead ones from the docx.
+        # A dead link is a signal, not noise -- check_urls_alive prints a loud
+        # banner whenever the failing link belongs to the project leading this
+        # posting (its server should be fixed, not its link suppressed).
         if check_links:
             try:
-                for _, url in _project_urls_for(sc["lead_project"]):
-                    ok, _status = check_url(url)
-                    if not ok:
-                        removed = remove_dead_links(resume_docx, [url])
-                        if removed:
-                            print(f"  (dropped dead link {url} from resume)")
+                from resume_builder.linkcheck import check_urls_alive
+                lead_urls = [u for _, u in _project_urls_for(sc["lead_project"])]
+                dead_links = check_urls_alive(lead_urls)
+                removed = remove_dead_links(resume_docx, dead_links)
+                if removed:
+                    print(f"  (dropped {removed} dead link(s) from resume)")
             except Exception as e:
                 print(f"  WARNING: link check failed for {row['company']}: {e}")
 
@@ -233,7 +273,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--sources", nargs="+", default=["arbeitnow"],
-        choices=["arbeitnow", "linkedin", "indeed"],
+        choices=["arbeitnow", "linkedin", "indeed", "stepstone", "absolventa", "targets"],
         help="Which sources to collect from this run",
     )
     parser.add_argument(
@@ -243,6 +283,31 @@ if __name__ == "__main__":
     parser.add_argument(
         "--no-link-check", action="store_true",
         help="Skip the R7 live link check (faster, but dead links are not dropped)",
+    )
+    parser.add_argument(
+        "--link-check", action="store_true",
+        help="Check every project link in the fact bank, print a banner for dead "
+             "ones, and exit 1 if any are down (run this before a batch)",
+    )
+    parser.add_argument(
+        "--gap-report", action="store_true",
+        help="Aggregate the gaps column across all postings and show the techs "
+             "that block you most (R5)",
+    )
+    parser.add_argument(
+        "--dedupe-audit", action="store_true",
+        help="Report how many postings are tracked and confirm the dedupe net "
+             "covers your full apply history",
+    )
+    parser.add_argument(
+        "--import-history", metavar="CSV",
+        help="Import a CSV (company,title,location,apply_url) of postings you "
+             "already applied to, so the pipeline never re-packages them",
+    )
+    parser.add_argument(
+        "--metric-audit", action="store_true",
+        help="List every metric in the fact bank with its declared source and "
+             "flag any you cannot defend yet (review feedback, item 5)",
     )
     parser.add_argument(
         "--followup", action="store_true",
@@ -258,7 +323,64 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if args.followup:
+    if args.metric_audit:
+        from fact_bank import metric_audit
+        metrics = metric_audit()
+        print("\nMetric provenance audit (review feedback, item 5) -- "
+              "fix every needs_action row before your next run\n")
+        for m in metrics:
+            flag = "!!" if m["needs_action"] else "ok"
+            print(f"  [{flag}] {m['token']:<9} {m['achievement']:<45} "
+                  f"verified={m['verified']} kind={m['kind']} "
+                  f"source={m['source'] or 'UNSET'}")
+        action = sum(1 for m in metrics if m["needs_action"])
+        print(f"\n{action} metric(s) still need a declared source. Set them in "
+              "METRIC_SOURCES in fact_bank.py, or rewrite the claim as scope.")
+        sys.exit(0)
+    elif args.import_history:
+        from pipeline.excel_log import import_history
+        added = import_history(XLSX_PATH, args.import_history)
+        print(f"Imported {added} new posting(s) from {args.import_history} "
+              f"into the dedupe history ({XLSX_PATH}).")
+        sys.exit(0)
+    elif args.dedupe_audit:
+        from pipeline.excel_log import audit_history
+        stats = audit_history(XLSX_PATH)
+        print(f"\nDedupe audit -- {XLSX_PATH}")
+        print(f"  sheets:          {stats['sheets']}")
+        print(f"  total rows:      {stats['rows']}")
+        print(f"  unique postings: {stats['unique']}")
+        print(f"  marked applied:  {stats['applied']}")
+        print(f"  by status:       {stats['by_status']}")
+        if stats["duplicate_rows"]:
+            print(f"  WARNING: {len(stats['duplicate_rows'])} duplicate hash row(s): "
+                  f"{stats['duplicate_rows'][:5]}")
+        else:
+            print("  no duplicate hashes -- dedupe net is clean")
+        if not stats["rows"]:
+            print("  NOTE: the tracker is empty. If you have applied to postings "
+                  "before, import them with --import-history so they are never re-sent.")
+        sys.exit(0)
+    elif args.gap_report:
+        from pipeline.excel_log import aggregate_gaps
+        gaps = aggregate_gaps(XLSX_PATH)
+        print(f"\nTechnology gap report (R5) -- {sum(g['count'] for g in gaps.values())} "
+              f"gap occurrence(s) across all tracked postings\n")
+        if not gaps:
+            print("  No gaps logged yet -- run the pipeline first.")
+        else:
+            for tech, info in sorted(gaps.items(), key=lambda kv: -kv[1]["count"]):
+                ex = "; ".join(f"{c} | {t}" for c, t in info["examples"])
+                print(f"  {tech:<24} x{info['count']:<4} e.g. {ex}")
+        sys.exit(0)
+    elif args.link_check:
+        results = check_project_links()
+        report_project_links(results)
+        dead = any(not ok for links in results.values() for ok, _ in links.values())
+        print("\n" + ("1 or more project links are DOWN -- fix before generating packages."
+                      if dead else "All project links are up."))
+        sys.exit(1 if dead else 0)
+    elif args.followup:
         followup.render_report(XLSX_PATH)
     elif args.mark_applied:
         followup.mark_applied(XLSX_PATH, args.mark_applied[0], args.mark_applied[1])

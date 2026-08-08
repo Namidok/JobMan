@@ -13,6 +13,8 @@ Rejects a posting BEFORE document generation, with a logged reason:
     Research, Data Science, or generic SWE)
   - Required structured field missing (city / start date / submission
     channel) -- the parser flagged it; we refuse to guess (R2)
+  - LinkedIn Easy Apply as the only submission channel (R9) -- refused
+    because it never reaches the employer's ATS (BLOCK_EASY_APPLY_ONLY)
 
 The gate reads ALL thresholds from config (CANDIDATE_PROFILE,
 MAX_POSTING_AGE_DAYS); nothing is hardcoded here.
@@ -25,7 +27,7 @@ from datetime import date
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from config import CANDIDATE_PROFILE, MAX_POSTING_AGE_DAYS
+from config import CANDIDATE_PROFILE, MAX_POSTING_AGE_DAYS, BLOCK_EASY_APPLY_ONLY
 from pipeline.jd_parser import parse_posting
 
 # Parent groups that run a single ATS across subsidiaries. A repost from any
@@ -166,6 +168,14 @@ def evaluate(posting, parsed=None, seen_keys=None, today=None):
     verdict, why = classify_role(parsed)
     if verdict == "reject":
         reasons.append(why)
+
+    # 8. Channel enforcement (R9): the parser already prefers a JD-named
+    #    portal or email over Easy Apply; any posting that still lands on Easy
+    #    Apply never reaches the employer's ATS, so it is refused rather than
+    #    merely logged as non-compliant.
+    if BLOCK_EASY_APPLY_ONLY and parsed.get("submission_channel_kind") == "easy_apply":
+        note = parsed.get("submission_channel_note") or "non-compliant"
+        reasons.append(f"Easy Apply channel refused ({note})")
 
     return (len(reasons) == 0), reasons
 
